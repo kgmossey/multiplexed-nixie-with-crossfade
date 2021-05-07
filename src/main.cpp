@@ -1,23 +1,19 @@
 // define pins
-#define hours_pin         2
-#define minutes_pin       3
-#define seconds_pin       4
-#define hours             4 // pin 2 mask
-#define hours_off       251 // pin 2
-#define minutes           8 // pin 3 mask
-#define minutes_off     247 // pin 3
-#define seconds          16 // pin 4 mask
-#define seconds_off     239 // pin 4
-#define tubes_off_mask  227 // B11100011
-#define tubes_on_mask    28 // B00011100
-#define A_ones   16 // PC2
-#define B_ones   14 // PC0
-#define C_ones   13 // PB5
-#define D_ones   15 // PC1
-#define A_tens   12 // PB4
-#define B_tens   10 // PB2
-#define C_tens   9  // PB1
-#define D_tens   11 // PB3
+#define hours_pin      2 // PD2
+#define minutes_pin    3 // PD3
+#define seconds_pin    4 // PD4
+#define A_ones        16 // PC2
+#define B_ones        14 // PC0
+#define C_ones        13 // PB5
+#define D_ones        15 // PC1
+#define A_tens        12 // PB4
+#define B_tens        10 // PB2
+#define C_tens         9 // PB1
+#define D_tens        11 // PB3
+// define masks
+#define hours          4 // pin 2 mask
+#define minutes        8 // pin 3 mask
+#define seconds       16 // pin 4 mask
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -30,6 +26,9 @@ void update_tube_pair (byte value, byte tube_pair);
 void cycle_digits();
 void show_ram(byte addr);
 void turn_off_tubes (byte tube_mask);
+void update_hours();
+void update_minutes();
+void update_seconds();
 
 /********************
  * Global variables *
@@ -93,40 +92,25 @@ void loop() {
     // Turn off seconds (which was previously lit)
     turn_off_tubes(seconds);
     // Update digits, turn on the hours for the set step time
-    update_tube_pair(clock.hour, hours);
-    inner_step_start_time = micros();
-    current_micros = micros();
-    while(current_micros - inner_step_start_time < pulse_time) {
-      current_micros = micros();
-    }
+    update_hours();
 
     // update minutes //
     // Turn off hours (which was previously lit)
     turn_off_tubes(hours);
     // Update digits, turn on the minutes for the set step time
-    update_tube_pair(clock.minute, minutes);
-    inner_step_start_time = micros();
-    current_micros = micros();
-    while(current_micros - inner_step_start_time < pulse_time) {
-      current_micros = micros();
-    }
+    update_minutes();
 
     // update seconds
     // Turn off minutes (which was previously lit)
     turn_off_tubes(minutes);
     // Update digits, turn on the seconds for the set step time
-    update_tube_pair(clock.second, seconds);
-    inner_step_start_time = micros();
-    current_micros = micros();
-    while(current_micros - inner_step_start_time < pulse_time) {
-      current_micros = micros();
-    }
+    update_seconds();
   }
 }
 
 void turn_off_tubes(byte tube_mask) {
   PORTD = PORTD & (255 - tube_mask);
-  delay(100);   // give time for tubes to discharge
+  delayMicroseconds(100);   // give time for tubes to discharge
 }
 
 void update_tube_pair (byte value, byte tube_pair){
@@ -137,9 +121,36 @@ void update_tube_pair (byte value, byte tube_pair){
 
 }
 
+void update_hours() {
+  update_tube_pair(clock.hour, hours);
+  inner_step_start_time = micros();
+  current_micros = micros();
+  while(current_micros - inner_step_start_time < pulse_time) {
+    current_micros = micros();
+  }
+}
+
+void update_minutes() {
+  update_tube_pair(clock.minute, minutes);
+  inner_step_start_time = micros();
+  current_micros = micros();
+  while(current_micros - inner_step_start_time < pulse_time) {
+    current_micros = micros();
+  }
+}
+
+void update_seconds() {
+  update_tube_pair(clock.second, seconds);
+  inner_step_start_time = micros();
+  current_micros = micros();
+  while(current_micros - inner_step_start_time < pulse_time) {
+    current_micros = micros();
+  }
+}
+
 void cycle_digits() {
-  byte x;
-  for (byte i=0;i<10;i++)
+  int x;
+  for (int i=0;i<10;i++)
   {
     x = i*10 + i;
     // update all the tubes at once
@@ -151,7 +162,7 @@ void cycle_digits() {
       current_micros = micros();
     }
   }
-  for (byte i=9;i>=0;i--)
+  for (int i=9;i>=0;i--)
   {
     x = i*10 + i;
     // update all the tubes at once
