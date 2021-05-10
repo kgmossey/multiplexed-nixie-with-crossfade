@@ -29,6 +29,7 @@ void turn_off_tubes (byte tube_mask);
 void update_hours();
 void update_minutes();
 void update_seconds();
+void hold_display(unsigned long microseconds);
 
 /********************
  * Global variables *
@@ -54,9 +55,6 @@ struct display {
   byte minutes_tubes;
   byte seconds_tubes;
 } Display;
-unsigned long inner_step_start_time;
-unsigned long outer_step_start_time;
-unsigned long current_micros;
 unsigned pulse_time = 1000;
 bool getUpdatedTime = false;
 
@@ -87,20 +85,22 @@ void setup() {
   }
   // Configure timer interrupts every 100uS
   cli(); // CLear Interrupts, same as noInterrupts();
-  TCCR1A = B00000000;   // Timer/Counter1 Control Registers A, B, & C - see datasheet
-  TCCR1B = B00001011;   // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR1A
-  TCCR1C = B00000000;   //
-  TCNT1  = 0;           // Timer/Counter1: Initialize the counter to 0
-  OCR1A  = 124;         // Output Compare Register 1A, 1B:   16MHz/(f*premult)-1
-  OCR1B  = 249;         //    24: 10000Hz, or 100uS delay
-                        //   124: 2000Hz, or 500uS
-                        //   249: 1000Hz, or 1000uS
-                        //   499: 500Hz, or 2000uS   <- values > 255 are why you
-                        //   749: 333 1/3Hz, or 3000uS           need to use the
-                        //   999: 250 Hz, or 4000uS              16 bit Timer1
-  TIMSK1 |= _BV(OCIE1A);// Timer/Counter1 Interrupt Mask Register
+  TCCR1A = B00000000;    // Timer/Counter1 Control Registers A, B, & C - see datasheet
+  TCCR1B = B00001100;    // Bits 0:2->set premult = 256, Bits 3:4->set compare to OCR1A
+  TCCR1C = B00000000;    // TCCR1C is only FOC flag which are unused
+  TCNT1  = 0;            // Timer/Counter1: Initialize the counter to 0
+  OCR1A  = 62499;        // Output Compare Register 1A:   16MHz/(f*premult)-1
+                         //   62499: 1Hz, or 1S delay
+                         //   31249: 2Hz
+  TIMSK1 |= _BV(OCIE1A); // Timer/Counter1 Interrupt Mask Register
+  TCCR2A = B00000010;    // Timer/Counter2 Control Registers A, B, & C - see datasheet
+  TCCR2B = B00001100;    // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR2A
+  TCNT2  = 0;            // Timer/Counter2: Initialize the counter to 0
+  OCR2A  = 24;           // Output Compare Register 2A:   16MHz/(f*premult)-1
+                         //    24: 10000Hz, or 100uS delay
+  TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register
   sei(); // SEt Interrupts, same as Interrupts();
-  //cycle_digits();
+  cycle_digits();
 }
 
 void loop() {
@@ -113,15 +113,21 @@ void loop() {
   }
 }
 
+/******************************
+ * Check time at 1Hz interval *
+ ******************************/
+ISR(TIMER1_COMPA_vect) {
+  getUpdatedTime = true;
+}
+
 /*
  * Will fire every 100uS.  See if the state needs to transition,
  * and checks the button states as well.
  */
-ISR(TIMER1_COMPA_vect) {
+ISR(TIMER2_COMPA_vect) {
   static byte step_counter = 0;
   switch (step_counter) {
     case 0:
-      getUpdatedTime = true;
       turn_off_tubes(seconds);
       break;
     case 1:
@@ -178,15 +184,18 @@ void update_seconds() {
   update_tube_pair(Display.seconds_tubes, seconds);
 }
 
+/***************************************************************
+ * Have every bulb cycle every digit every time the display is *
+ * turned on to prevent cathode poisoning. Multiple methods    *
+ * of cycling keep it interesting...                           *
+ ***************************************************************/
 void cycle_digits() {
   randomSeed(analogRead(2));  // currently unused pin
-  int display_type = random(2);
+  int display_type = random(3);
   int x;
-  bool done_looping = false;
-  int increment = 0;
 
   switch (display_type) {
-    case 0:
+    case 0:  // count up from 0 to 9
       for (int i=0;i<10;i++)
       {
         x = i*10 + i;
@@ -194,25 +203,10 @@ void cycle_digits() {
         Display.hours_tubes = x;
         Display.minutes_tubes = x;
         Display.seconds_tubes = x;
-        /*while (!done_looping) {
-          if (getUpdatedTime) {
-            increment++;
-            getUpdatedTime = false;
-            if (increment > 1000) {
-              done_looping = true;
-            }
-          }
-        }*/
-        //turn_off_tubes(hours + minutes + seconds);
-        //update_tube_pair(x, hours + minutes + seconds);
-        inner_step_start_time = micros();
-        current_micros = micros();
-        while(current_micros - inner_step_start_time < 250000) {
-          current_micros = micros();
-        }
+        hold_display(250000);
       }
       break;
-    case 1:
+    case 1:  // count down from 9 to 0
       for (int i=9;i>=0;i--)
       {
         x = i*10 + i;
@@ -220,30 +214,23 @@ void cycle_digits() {
         Display.hours_tubes = x;
         Display.minutes_tubes = x;
         Display.seconds_tubes = x;
-        /*while (!done_looping) {
-          if (getUpdatedTime) {
-            increment++;
-            getUpdatedTime = false;
-            if (increment == 1000) {
-              done_looping = true;
-            }
-          }
-        }*/
-        //turn_off_tubes(hours + minutes + seconds);
-        //update_tube_pair(x, hours + minutes + seconds);
-        inner_step_start_time = micros();
-        current_micros = micros();
-        while(current_micros - inner_step_start_time < 250000) {
-          current_micros = micros();
-        }
+        hold_display(250000);
       }
       break;
-    case 2:
+    case 2:  // scroll 000000123456789000000 across display
+      unsigned long pattern[15] = {0, 1, 12, 123, 1234, 12345, 123456, 234567,
+                       345678, 456789, 568790, 678900, 789000, 890000, 900000};
+      for (int i=0; i<15; i++) {
+        Display.hours_tubes = pattern[i]/10000;
+        Display.minutes_tubes = (pattern[i] % 10000) / 100;
+        Display.seconds_tubes = pattern[i] % 100;
+        hold_display(200000);
+      }
       break;
-      // scroll 000000123456789000000 across display
   }
 }
-
+/*
+// todo: update this function 
 void show_ram(byte addr) {
   byte x=clock.ram[addr];
   byte y=clock.ram[addr+1];
@@ -281,6 +268,14 @@ void show_ram(byte addr) {
       current_micros = micros();
     }
   }
-
-
+}
+*/
+void hold_display(unsigned long microseconds) {
+  unsigned long step_start_time;
+  unsigned long current_micros;
+  step_start_time = micros();
+  current_micros = micros();
+  while(current_micros - step_start_time < microseconds) {
+    current_micros = micros();
+  }
 }
