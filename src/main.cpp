@@ -1,22 +1,20 @@
-// define pins
-#define hours_pin      2 // PD2
-#define minutes_pin    3 // PD3
-#define seconds_pin    4 // PD4
-#define A_ones        16 // PC2
-#define B_ones        14 // PC0
-#define C_ones        13 // PB5
-#define D_ones        15 // PC1
-#define A_tens        12 // PB4
-#define B_tens        10 // PB2
-#define C_tens         9 // PB1
-#define D_tens        11 // PB3
 // define masks
-#define hours          4 // pin 2 mask, bit 2
-#define minutes        8 // pin 3 mask, bit 3
-#define seconds       16 // pin 4 mask, bit 4
+#define hours           4 // pin 2 mask, bit 2
+#define minutes         8 // pin 3 mask, bit 3
+#define seconds        16 // pin 4 mask, bit 4
+#define SleepButton    (PINB & 0x01) // Pin 14 (D8)
+#define SettingsButton (PIND & 0x80) // Pin 13 (D7)
+#define PlusButton     (PIND & 0x40) // Pin 12 (D6)
+#define MinusButton    (PIND & 0x20) // Pin 11 (D5)
+#define SleepMask      1
+#define SettingsMask   2
+#define PlusMask       3
+#define MinusMask      4
+#define Pressed        0
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <Button.h>
 #include "DS1307.h"
 
 /*************************
@@ -30,11 +28,16 @@ void update_hours();
 void update_minutes();
 void update_seconds();
 void hold_display(unsigned long microseconds);
+void btnSettingsPressed();
+void btnForwardPressed();
+void btnBackPressed();
+void btnPowerPressed();
 
 /********************
  * Global variables *
  ********************/
 DS1307 clock; //define a object of DS1307 class
+Button btnSettings;
 // Create an index of binary coded decimal values to easily reference two digit numbers
 byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04 05 06 07 08 09
                   8, 136, 40, 168, 24, 152, 56, 184, 72, 200,  // 10 11 12 13 14 15 16 17 18 19
@@ -50,32 +53,46 @@ byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04
 // disable the tube by cathode by sending an invalid code to the K155ID1 chip
 byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // -0 -1 -2 -3 -4 -5 -6 -7 -8 -9
 byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
+bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interrupt Complete
+enum power {On, Off, Sleep};
 struct display {
   byte hours_tubes;
   byte minutes_tubes;
   byte seconds_tubes;
+  byte previous_hours;
+  byte previous_minutes;
+  byte previous_seconds;
+  power power_state;
+  bool setup_mode;
+  bool flash;
 } Display;
 unsigned pulse_time = 1000;
-bool getUpdatedTime = false;
+byte buttons=0;
+byte pass=0;
+byte step_counter = 0;
+byte premult = 0;
 
 /********************
  * Code starts here *
  ********************/
 void setup() {
   // put your setup code here, to run once:
-  pinMode(A_tens,      OUTPUT);
-  pinMode(B_tens,      OUTPUT);
-  pinMode(C_tens,      OUTPUT);
-  pinMode(D_tens,      OUTPUT);
-  pinMode(A_ones,      OUTPUT);
-  pinMode(B_ones,      OUTPUT);
-  pinMode(C_ones,      OUTPUT);
-  pinMode(D_ones,      OUTPUT);
-  pinMode(hours_pin,   OUTPUT);
-  pinMode(minutes_pin, OUTPUT);
-  pinMode(seconds_pin, OUTPUT);
+  // Set button inputs
+  DDRB  &= B11111110;   // Pin 14 (D8) low for input (Button #4)
+  DDRD  &= B00011111;   // Pins 11-13 (D5-D7) set low for input (Buttons #1-3)
+  PORTB |= B00000001;   // and write a one for internal resistor pullup
+  PORTD |= B11100000;
+  // Set tube outputs.  Lowercase are "ones" place driver chip.
+  DDRB  |= B00111110;   // Pins 15-19 (D9-D13) set high for output (--cADBC-)
+  DDRC  |= B00000111;   // Pins 23-25 (A0-A2) set high for ouput   (-----bda)
+  DDRD  |= B00011100;   // Pins 2-4 (D2-D4) set high for output    (---SHM--)
+
+  // Button delay times are .1ms
+  btnSettings.init(100, 10000, btnSettingsPressed);
   turn_off_tubes(hours + minutes + seconds);
-  Serial.begin(9600);
+  #ifdef DEBUG_MODE
+    Serial.begin(9600);
+  #endif
   clock.begin();
   if (!clock.isStarted()) {
     clock.fillByYMD(2021,4,20);     // Y,M,D
@@ -83,41 +100,77 @@ void setup() {
     clock.fillDayOfWeek(TUE);
     clock.setTime();
   }
-  // Configure timer interrupts every 100uS
+  // Configure timer interrupts every 100uS, 250ms
   cli(); // CLear Interrupts, same as noInterrupts();
   TCCR1A = B00000000;    // Timer/Counter1 Control Registers A, B, & C - see datasheet
   TCCR1B = B00001100;    // Bits 0:2->set premult = 256, Bits 3:4->set compare to OCR1A
   TCCR1C = B00000000;    // TCCR1C is only FOC flag which are unused
   TCNT1  = 0;            // Timer/Counter1: Initialize the counter to 0
-  OCR1A  = 62499;        // Output Compare Register 1A:   16MHz/(f*premult)-1
+  OCR1A  = 31249;        // Output Compare Register 1A:   16MHz/(f*premult)-1
                          //   62499: 1Hz, or 1S delay
-                         //   31249: 2Hz
+                         //   31249: 2Hz, 15624: 4Hz
   TIMSK1 |= _BV(OCIE1A); // Timer/Counter1 Interrupt Mask Register
   TCCR2A = B00000010;    // Timer/Counter2 Control Registers A, B, & C - see datasheet
   TCCR2B = B00001100;    // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR2A
   TCNT2  = 0;            // Timer/Counter2: Initialize the counter to 0
   OCR2A  = 24;           // Output Compare Register 2A:   16MHz/(f*premult)-1
                          //    24: 10000Hz, or 100uS delay
+                         //    99 with a premult of 8 gives 20000Hz
   TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register
+  Display.setup_mode = false;
+  Display.power_state = On;
   sei(); // SEt Interrupts, same as Interrupts();
   cycle_digits();
 }
 
 void loop() {
-  if (getUpdatedTime) {
+
+  if (TC1IRQ_complete) {
+    Display.previous_hours = clock.hour;
+    Display.previous_minutes = clock.minute;
+    Display.previous_seconds = clock.second;
     clock.getTime();
+    pass = 1;
     Display.hours_tubes = clock.hour;
     Display.minutes_tubes = clock.minute;
     Display.seconds_tubes = clock.second;
-    getUpdatedTime = false;
+    premult = 0;
+    TC1IRQ_complete = false;
   }
+
+  if (TC2IRQ_complete) {
+    // Check cross-fade
+    if (step_counter % 10 <= pass) {
+      Display.hours_tubes = clock.hour;
+      Display.minutes_tubes = clock.minute;
+      Display.seconds_tubes = clock.second;
+    } else {
+      Display.hours_tubes = Display.previous_hours;
+      Display.minutes_tubes = Display.previous_minutes;
+      Display.seconds_tubes = Display.previous_seconds;
+    }
+    // Check button states
+    if (buttons & _BV(SettingsMask)) {
+      btnSettings.set_current_state(down);
+    } else {
+      btnSettings.set_current_state(up);
+    }
+    buttons = 0;
+    TC2IRQ_complete = false;
+  }
+
 }
 
 /******************************
- * Check time at 1Hz interval *
+ * Check time at 2Hz interval *
  ******************************/
 ISR(TIMER1_COMPA_vect) {
-  getUpdatedTime = true;
+  if (Display.setup_mode) {
+    Display.flash = !Display.flash;
+  } else {
+    Display.flash = false;
+  }
+  TC1IRQ_complete = true;
 }
 
 /*
@@ -125,39 +178,45 @@ ISR(TIMER1_COMPA_vect) {
  * and checks the button states as well.
  */
 ISR(TIMER2_COMPA_vect) {
-  static byte step_counter = 0;
   switch (step_counter) {
     case 0:
       turn_off_tubes(seconds);
       break;
-    case 1:
+    case 1 ... 9:
       update_hours();
       break;
     case 10:
       turn_off_tubes(hours);
       break;
-    case 11:
+    case 11 ... 19:
       update_minutes();
       break;
     case 20:
       turn_off_tubes(minutes);
       break;
-    case 21:
+    case 21 ... 29:
       update_seconds();
       break;
   }
   step_counter++;
-  if (step_counter == 30) { step_counter = 0; }
+  if (step_counter == 30) {
+    step_counter = 0;
+    if (premult % 8 == 0) {
+      if (pass < 9) {pass++;}  // freeze pass at 10
+    }
+    premult++;
+  }
+
+  if (SettingsButton == Pressed) {
+    buttons |= _BV(SettingsMask);
+  } else {
+    buttons &= (255 - _BV(SettingsMask));
+  }
+  TC2IRQ_complete = true;
 }
 
 void turn_off_tubes(byte tube_mask) {
-/* examples to play with later
-  PORTC |= _BV(0);  // Set bit 0 only.
-  PORTC &= ~(_BV(1));  // Clear bit 1 only.
-  PORTC ^= _BV(7);  // Toggle bit 7 only.
-*/
   PORTD &= 255 - tube_mask;
-  //delayMicroseconds(100);   // give time for tubes to discharge
 }
 
 void update_tube_pair (byte value, byte tube_pair){
@@ -167,8 +226,10 @@ void update_tube_pair (byte value, byte tube_pair){
   turn_off_tubes(tube_pair);
   PORTB = (bcd[value] << 1) & B00111110;
   PORTC = (bcd[value] >> 5) & B00000111;
-  // Now we can turn on the tube anode
-  PORTD |= tube_pair;
+  // Now we can turn on the tube anode, if it's not in the off cycle of a flashing event
+  if (!Display.flash) {
+    PORTD |= tube_pair;
+  }
 
 }
 
@@ -230,7 +291,7 @@ void cycle_digits() {
   }
 }
 /*
-// todo: update this function 
+// todo: update this function
 void show_ram(byte addr) {
   byte x=clock.ram[addr];
   byte y=clock.ram[addr+1];
@@ -278,4 +339,21 @@ void hold_display(unsigned long microseconds) {
   while(current_micros - step_start_time < microseconds) {
     current_micros = micros();
   }
+}
+
+void btnSettingsPressed() {
+  Display.flash = false;
+  Display.setup_mode = !Display.setup_mode;
+}
+
+void btnForwardPressed() {
+
+}
+
+void btnBackPressed() {
+
+}
+
+void btnPowerPressed() {
+
 }
