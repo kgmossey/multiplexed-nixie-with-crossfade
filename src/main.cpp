@@ -1,7 +1,7 @@
 // define masks
-#define hours           4 // pin 2 mask, bit 2
-#define minutes         8 // pin 3 mask, bit 3
-#define seconds        16 // pin 4 mask, bit 4
+#define left           8 // pin 3 mask, bit 3
+#define center         4 // pin 2 mask, bit 2
+#define right          16 // pin 4 mask, bit 4
 #define SleepButton    (PINB & 0x01) // Pin 14 (D8)
 #define SettingsButton (PIND & 0x80) // Pin 13 (D7)
 #define PlusButton     (PIND & 0x40) // Pin 12 (D6)
@@ -24,9 +24,9 @@ void update_tube_pair (byte value, byte tube_pair);
 void cycle_digits();
 void show_ram(byte addr);
 void turn_off_tubes (byte tube_mask);
-void update_hours();
-void update_minutes();
-void update_seconds();
+void update_left();
+void update_center();
+void update_right();
 void hold_display(unsigned long microseconds);
 void btnSettingsPressed();
 void btnForwardPressed();
@@ -55,13 +55,14 @@ byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // 
 byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
 bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interrupt Complete
 enum power {On, Off, Sleep};
+enum State_enum {SHOW_TIME, SET_HOURS, SET_MINUTES, SET_SECONDS};
 struct display {
-  byte hours_tubes;
-  byte minutes_tubes;
-  byte seconds_tubes;
-  byte previous_hours;
-  byte previous_minutes;
-  byte previous_seconds;
+  byte current_left;
+  byte current_center;
+  byte current_right;
+  byte previous_left;
+  byte previous_center;
+  byte previous_right;
   power power_state;
   bool setup_mode;
   bool flash;
@@ -89,7 +90,7 @@ void setup() {
 
   // Button delay times are .1ms
   btnSettings.init(100, 10000, btnSettingsPressed);
-  turn_off_tubes(hours + minutes + seconds);
+  turn_off_tubes(left + center + right);
   #ifdef DEBUG_MODE
     Serial.begin(9600);
   #endif
@@ -126,14 +127,14 @@ void setup() {
 void loop() {
 
   if (TC1IRQ_complete) {
-    Display.previous_hours = clock.hour;
-    Display.previous_minutes = clock.minute;
-    Display.previous_seconds = clock.second;
+    Display.previous_left = clock.hour;
+    Display.previous_center = clock.minute;
+    Display.previous_right = clock.second;
     clock.getTime();
     pass = 1;
-    Display.hours_tubes = clock.hour;
-    Display.minutes_tubes = clock.minute;
-    Display.seconds_tubes = clock.second;
+    Display.current_left = clock.hour;
+    Display.current_center = clock.minute;
+    Display.current_right = clock.second;
     premult = 0;
     TC1IRQ_complete = false;
   }
@@ -141,13 +142,13 @@ void loop() {
   if (TC2IRQ_complete) {
     // Check cross-fade
     if (step_counter % 10 <= pass) {
-      Display.hours_tubes = clock.hour;
-      Display.minutes_tubes = clock.minute;
-      Display.seconds_tubes = clock.second;
+      Display.current_left = clock.hour;
+      Display.current_center = clock.minute;
+      Display.current_right = clock.second;
     } else {
-      Display.hours_tubes = Display.previous_hours;
-      Display.minutes_tubes = Display.previous_minutes;
-      Display.seconds_tubes = Display.previous_seconds;
+      Display.current_left = Display.previous_left;
+      Display.current_center = Display.previous_center;
+      Display.current_right = Display.previous_right;
     }
     // Check button states
     if (buttons & _BV(SettingsMask)) {
@@ -180,22 +181,22 @@ ISR(TIMER1_COMPA_vect) {
 ISR(TIMER2_COMPA_vect) {
   switch (step_counter) {
     case 0:
-      turn_off_tubes(seconds);
+      turn_off_tubes(right);
       break;
     case 1 ... 9:
-      update_hours();
+      update_left();
       break;
     case 10:
-      turn_off_tubes(hours);
+      turn_off_tubes(left);
       break;
     case 11 ... 19:
-      update_minutes();
+      update_center();
       break;
     case 20:
-      turn_off_tubes(minutes);
+      turn_off_tubes(center);
       break;
     case 21 ... 29:
-      update_seconds();
+      update_right();
       break;
   }
   step_counter++;
@@ -233,16 +234,16 @@ void update_tube_pair (byte value, byte tube_pair){
 
 }
 
-void update_hours() {
-  update_tube_pair(Display.hours_tubes, hours);
+void update_left() {
+  update_tube_pair(Display.current_left, left);
 }
 
-void update_minutes() {
-  update_tube_pair(Display.minutes_tubes, minutes);
+void update_center() {
+  update_tube_pair(Display.current_center, center);
 }
 
-void update_seconds() {
-  update_tube_pair(Display.seconds_tubes, seconds);
+void update_right() {
+  update_tube_pair(Display.current_right, right);
 }
 
 /***************************************************************
@@ -261,9 +262,9 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        Display.hours_tubes = x;
-        Display.minutes_tubes = x;
-        Display.seconds_tubes = x;
+        Display.current_left = x;
+        Display.current_center = x;
+        Display.current_right = x;
         hold_display(250000);
       }
       break;
@@ -272,9 +273,9 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        Display.hours_tubes = x;
-        Display.minutes_tubes = x;
-        Display.seconds_tubes = x;
+        Display.current_left = x;
+        Display.current_center = x;
+        Display.current_right = x;
         hold_display(250000);
       }
       break;
@@ -282,9 +283,9 @@ void cycle_digits() {
       unsigned long pattern[15] = {0, 1, 12, 123, 1234, 12345, 123456, 234567,
                        345678, 456789, 568790, 678900, 789000, 890000, 900000};
       for (int i=0; i<15; i++) {
-        Display.hours_tubes = pattern[i]/10000;
-        Display.minutes_tubes = (pattern[i] % 10000) / 100;
-        Display.seconds_tubes = pattern[i] % 100;
+        Display.current_left = pattern[i]/10000;
+        Display.current_center = (pattern[i] % 10000) / 100;
+        Display.current_right = pattern[i] % 100;
         hold_display(200000);
       }
       break;
