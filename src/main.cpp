@@ -1,83 +1,13 @@
-// define masks
-#define left           8 // pin 3 mask, bit 3
-#define center         4 // pin 2 mask, bit 2
-#define right          16 // pin 4 mask, bit 4
-#define SleepButton    (PINB & 0x01) // Pin 14 (D8)
-#define SettingsButton (PIND & 0x80) // Pin 13 (D7)
-#define PlusButton     (PIND & 0x40) // Pin 12 (D6)
-#define MinusButton    (PIND & 0x20) // Pin 11 (D5)
-#define SleepMask      1
-#define SettingsMask   2
-#define PlusMask       3
-#define MinusMask      4
-#define Pressed        0
+#include "main.h"
 
-#include <Arduino.h>
-#include <Wire.h>
-#include <Button.h>
-#include "DS1307.h"
-
-/*************************
- * Function declarations *
- *************************/
-void update_tube_pair (byte value, byte tube_pair);
-void cycle_digits();
-void show_ram(byte addr);
-void turn_off_tubes (byte tube_mask);
-void update_left();
-void update_center();
-void update_right();
-void hold_display(unsigned long microseconds);
-void btnSettingsPressed();
-void btnForwardPressed();
-void btnBackPressed();
-void btnPowerPressed();
-
-/********************
- * Global variables *
- ********************/
-DS1307 clock; //define a object of DS1307 class
-Button btnSettings;
-// Create an index of binary coded decimal values to easily reference two digit numbers
-byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04 05 06 07 08 09
-                  8, 136, 40, 168, 24, 152, 56, 184, 72, 200,  // 10 11 12 13 14 15 16 17 18 19
-                  2, 130, 34, 162, 18, 146, 50, 178, 66, 194,  // 20 21 22 23 24 25 26 27 28 29
-                 10, 138, 42, 170, 26, 154, 58, 186, 74, 202,  // 30 31 32 33 34 35 36 37 38 39
-                  1, 129, 33, 161, 17, 145, 49, 177, 65, 193,  // 40 41 42 43 44 45 46 47 48 49
-                  9, 137, 41, 169, 25, 153, 57, 185, 73, 201,  // 50 51 52 53 54 55 56 57 58 59
-                  3, 131, 35, 163, 19, 147, 51, 179, 67, 195,  // 60 61 62 63 64 65 66 67 68 69
-                 11, 139, 43, 171, 27, 155, 59, 187, 75, 203,  // 70 71 72 73 74 75 76 77 78 79
-                  4, 132, 36, 164, 20, 148, 52, 180, 68, 196,  // 80 81 82 83 84 85 86 87 88 89
-                 12, 140, 44, 172, 28, 156, 60, 188, 76, 204}; // 90 91 92 93 94 95 96 97 98 99
-// Note: Nixies should, in general, not be turned off by cathode.  The following codes
-// disable the tube by cathode by sending an invalid code to the K155ID1 chip
-byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // -0 -1 -2 -3 -4 -5 -6 -7 -8 -9
-byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
-bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interrupt Complete
-enum power {On, Off, Sleep};
-enum State_enum {SHOW_TIME, SET_HOURS, SET_MINUTES, SET_SECONDS};
-struct display {
-  byte current_left;
-  byte current_center;
-  byte current_right;
-  byte previous_left;
-  byte previous_center;
-  byte previous_right;
-  power power_state;
-  bool setup_mode;
-  bool flash;
-} Display;
-unsigned pulse_time = 1000;
-byte buttons=0;
-byte pass=0;
-byte step_counter = 0;
-byte premult = 0;
+unsigned long start=0;
+unsigned long end=0;
 
 /********************
  * Code starts here *
  ********************/
 void setup() {
-  // put your setup code here, to run once:
+
   // Set button inputs
   DDRB  &= B11111110;   // Pin 14 (D8) low for input (Button #4)
   DDRD  &= B00011111;   // Pins 11-13 (D5-D7) set low for input (Buttons #1-3)
@@ -92,15 +22,25 @@ void setup() {
   btnSettings.init(100, 10000, btnSettingsPressed);
   turn_off_tubes(left + center + right);
   #ifdef DEBUG_MODE
-    Serial.begin(9600);
+    Serial.begin(38400);
   #endif
   clock.begin();
   if (!clock.isStarted()) {
-    clock.fillByYMD(2021,4,20);     // Y,M,D
-    clock.fillByHMS(10,57,00);      // H,M,S
+    clock.fillByYMD(2022,8,19);     // Y,M,D
+    clock.fillByHMS(20,13,00);      // H,M,S
     clock.fillDayOfWeek(TUE);
     clock.setTime();
   }
+  CrossfadeSM.setMaxTick (240);
+  LeftTubesOn.setNext(TubesOff_L);
+  TubesOff_L.setNext(CenterTubesOn);
+  CenterTubesOn.setNext(TubesOff_C);
+  TubesOff_C.setNext(RightTubesOn);
+  RightTubesOn.setNext(TubesOff_R);
+  TubesOff_R.setNext(LeftTubesOn);
+  //MultiplexSM.transitionTo(LeftTubesOn);
+  //MultiplexSM.transitionNext();
+
   // Configure timer interrupts every 100uS, 250ms
   cli(); // CLear Interrupts, same as noInterrupts();
   TCCR1A = B00000000;    // Timer/Counter1 Control Registers A, B, & C - see datasheet
@@ -118,45 +58,33 @@ void setup() {
                          //    24: 10000Hz, or 100uS delay
                          //    99 with a premult of 8 gives 20000Hz
   TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register
-  Display.setup_mode = false;
-  Display.power_state = On;
+
   sei(); // SEt Interrupts, same as Interrupts();
   cycle_digits();
 }
 
 void loop() {
 
-  if (TC1IRQ_complete) {
-    Display.previous_left = clock.hour;
-    Display.previous_center = clock.minute;
-    Display.previous_right = clock.second;
+  if (TC1IRQ_complete) { // 2Hz interrrupt
+    // This getTime() call takes slight over 1ms, needs to be handled outside 
+    // interrupt because of the way the wire library works.
     clock.getTime();
-    pass = 1;
-    Display.current_left = clock.hour;
-    Display.current_center = clock.minute;
-    Display.current_right = clock.second;
-    premult = 0;
+    if (DISPLAY_DATE &&
+        display_date_step > DISPLAY_DATE_START &&
+        display_date_step <= DISPLAY_DATE_END) {
+      display.update (clock.year, clock.month, clock.dayOfMonth);
+    } else {
+      display.update (clock.hour, clock.minute, clock.second);
+    }
+    display.resetStep();
+    MultiplexSM.resetTick();
+    CrossfadeSM.resetTick();
     TC1IRQ_complete = false;
   }
-
-  if (TC2IRQ_complete) {
-    // Check cross-fade
-    if (step_counter % 10 <= pass) {
-      Display.current_left = clock.hour;
-      Display.current_center = clock.minute;
-      Display.current_right = clock.second;
-    } else {
-      Display.current_left = Display.previous_left;
-      Display.current_center = Display.previous_center;
-      Display.current_right = Display.previous_right;
-    }
-    // Check button states
-    if (buttons & _BV(SettingsMask)) {
-      btnSettings.set_current_state(down);
-    } else {
-      btnSettings.set_current_state(up);
-    }
-    buttons = 0;
+  
+  if (TC2IRQ_complete) { // 10,000Hz interrupt
+    // Everything handled inside interrupt
+    // Process needs to take < 100us, currently takes ~20us.
     TC2IRQ_complete = false;
   }
 
@@ -166,54 +94,67 @@ void loop() {
  * Check time at 2Hz interval *
  ******************************/
 ISR(TIMER1_COMPA_vect) {
-  if (Display.setup_mode) {
-    Display.flash = !Display.flash;
+  display_date_step++;
+  if (display_date_step == DISPLAY_DATE_END) { display_date_step = 0; }
+
+  if (display.setup_mode) {
+    display.flash = !display.flash;
   } else {
-    Display.flash = false;
+    display.flash = false;
   }
   TC1IRQ_complete = true;
 }
 
-/*
- * Will fire every 100uS.  See if the state needs to transition,
- * and checks the button states as well.
- */
+/*****************************************************************
+ * Will fire every 100uS.  See if the state needs to transition, *
+ * and checks the button states as well.  - 10,000Hz -           *
+ *****************************************************************/
 ISR(TIMER2_COMPA_vect) {
-  switch (step_counter) {
-    case 0:
-      turn_off_tubes(right);
-      break;
-    case 1 ... 9:
-      update_left();
-      break;
-    case 10:
-      turn_off_tubes(left);
-      break;
-    case 11 ... 19:
-      update_center();
-      break;
-    case 20:
-      turn_off_tubes(center);
-      break;
-    case 21 ... 29:
-      update_right();
-      break;
-  }
-  step_counter++;
-  if (step_counter == 30) {
-    step_counter = 0;
-    if (premult % 8 == 0) {
-      if (pass < 9) {pass++;}  // freeze pass at 10
-    }
-    premult++;
+  static byte multiplexTick;
+  static byte xfadeTick;
+  
+  MultiplexSM.tick();
+  CrossfadeSM.tick();
+      
+  multiplexTick = MultiplexSM.getTick();
+  xfadeTick = CrossfadeSM.getTick();
+
+  if (multiplexTick == 0 || multiplexTick == 1) {
+    MultiplexSM.transitionNext();
   }
 
+  if (xfadeTick == 0) {
+    // When the crossfade tick is 0, increment the crossfade pass counter
+    display.nextStep();
+  }
+  if (MultiplexSM.getTick() <= display.getXfadeStep()) {
+    CrossfadeSM.transitionTo(Current);
+  } else {
+    CrossfadeSM.transitionTo(Previous);
+  }
+  MultiplexSM.update();
+
+// todo: code buttons
+/*
   if (SettingsButton == Pressed) {
     buttons |= _BV(SettingsMask);
   } else {
     buttons &= (255 - _BV(SettingsMask));
   }
+  if (buttons & _BV(SettingsMask)) {
+    btnSettings.set_current_state(down);
+  } else {
+    btnSettings.set_current_state(up);
+  }
+  buttons = 0;
+*/
   TC2IRQ_complete = true;
+}
+
+
+
+void turn_off_all_tubes () {
+  turn_off_tubes(left + center + right);
 }
 
 void turn_off_tubes(byte tube_mask) {
@@ -228,22 +169,39 @@ void update_tube_pair (byte value, byte tube_pair){
   PORTB = (bcd[value] << 1) & B00111110;
   PORTC = (bcd[value] >> 5) & B00000111;
   // Now we can turn on the tube anode, if it's not in the off cycle of a flashing event
-  if (!Display.flash) {
+  if (!display.flash) {
     PORTD |= tube_pair;
   }
 
 }
 
 void update_left() {
-  update_tube_pair(Display.current_left, left);
+  // Check cross-fade
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
+  update_tube_pair(CrossfadeSM.isInState(Current)
+                   ? display.getCurrentLeft()
+                   : display.getPreviousLeft(), left);
+#endif
 }
 
 void update_center() {
-  update_tube_pair(Display.current_center, center);
+  // Check cross-fade
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
+  update_tube_pair(CrossfadeSM.isInState(Current)
+                   ? display.getCurrentCenter()
+                   : display.getPreviousCenter(), center); 
+#endif
 }
 
 void update_right() {
-  update_tube_pair(Display.current_right, right);
+  // Check cross-fade
+  update_tube_pair(CrossfadeSM.isInState(Current)
+                   ? display.getCurrentRight()
+                   : display.getPreviousRight(), right);
 }
 
 /***************************************************************
@@ -262,9 +220,7 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        Display.current_left = x;
-        Display.current_center = x;
-        Display.current_right = x;
+        display.update( x, x, x);
         hold_display(250000);
       }
       break;
@@ -273,9 +229,7 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        Display.current_left = x;
-        Display.current_center = x;
-        Display.current_right = x;
+        display.update( x, x, x);
         hold_display(250000);
       }
       break;
@@ -283,9 +237,9 @@ void cycle_digits() {
       unsigned long pattern[15] = {0, 1, 12, 123, 1234, 12345, 123456, 234567,
                        345678, 456789, 568790, 678900, 789000, 890000, 900000};
       for (int i=0; i<15; i++) {
-        Display.current_left = pattern[i]/10000;
-        Display.current_center = (pattern[i] % 10000) / 100;
-        Display.current_right = pattern[i] % 100;
+        display.update( pattern[i]/10000,
+                        (pattern[i] % 10000) / 100,
+                        pattern[i] % 100);
         hold_display(200000);
       }
       break;
@@ -343,8 +297,8 @@ void hold_display(unsigned long microseconds) {
 }
 
 void btnSettingsPressed() {
-  Display.flash = false;
-  Display.setup_mode = !Display.setup_mode;
+  display.flash = false;
+  display.setup_mode = !display.setup_mode;
 }
 
 void btnForwardPressed() {

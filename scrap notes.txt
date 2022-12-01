@@ -25,3 +25,43 @@ byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04
 
 byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // -0 -1 -2 -3 -4 -5 -6 -7 -8 -9
 byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
+
+
+Transition triggers
+Right
+Off
+
+MultiplexSM:
+  Tick max count is 10
+  MultiplexSM could possibly have a "TransitionNext" function?
+    - LeftTubesOn -> TubesOff_L -> CenterTubesOn -> TubesOff_C -> RightTubesOn -> TubesOff_R -> LeftTubesOn
+
+Date display:
+If DISPLAY_DATE == 1 then the date will be displayed every 5 seconds for 3 seconds.
+This is configurable with DISPLAY_DATE_START and DISPLAY_DATE_END.
+  -Every half second display_date_step increases by one.
+  -After 8 seconds display_date_step resets to zero (16 ticks).
+
+CrossfadeSM:
+  Set max tick count to 240 or 250. When it reaches max, reset to 0 and increment xfade_pass
+  states: previous, current
+  If MultiplexSM tick <= xfade_pass, set state to current, otherwise previous
+
+Old algorithms:
+~~~~~~~~~~~~~~~
+  Display Crossfade:
+  Every 10th of a millisecond:
+    tubepair_step_counter increments by 1, when it reaches 30 (aka 3 thousandths of a second):
+      resets tubepair_step_counter to 0
+      increases xfade_premult by one
+      compares xfade_premult with CROSSFADE_SPEED.  If a multiple of: increase "pass" until pass = 10
+      pass is compared with tubepair_step_counter.  If the ones place is less than pass, tubes show new value, otherwise, old value
+
+Programming:
+~~~~~~~~~~~~
+ Arduino Uno Board | Board connection slot
+        D0         |          2
+        D1         |          3
+       Gnd         |          8
+      Reset        | Chip pin 1 (direct cxn)
+     5v -N/A-      | Ensure board is powered

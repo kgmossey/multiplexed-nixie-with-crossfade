@@ -7,3 +7,6 @@ src/DS1307.h
 include/README
 lib/README
 test/README
+.DS_Store
+debug_output
+.vscode/
