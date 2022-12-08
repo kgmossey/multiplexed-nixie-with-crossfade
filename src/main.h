@@ -26,7 +26,7 @@
 #define MinusMask      4
 #define Pressed        0
 
-//#define DEBUG_MODE
+#define DEBUG_MODE
 #define CROSSFADE_SPEED     8  // 0-10,
 #define DISPLAY_DATE        0  // 1 is show date every x cycles
 #define DISPLAY_DATE_START 11  // If DISPLAY_DATE is 1, show date between

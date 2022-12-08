@@ -79,6 +79,7 @@ Display::Display(byte xfadeSteps)
 void Display::update(byte Left, byte Center, byte Right)
 {
   previous = current;
+  TriggerSet = true;
   current.setAll(Left, Center, Right);
   xfadeStep = 0;
 }
@@ -97,6 +98,7 @@ byte Display::getPreviousRight()
 {
   return previous.getRight();
 }
+
 byte Display::getCurrentLeft()
 {
   return current.getLeft();
@@ -117,6 +119,8 @@ void Display::nextStep()
 //Serial.println("x");
   if (xfadeStep < maxXfade) {
     xfadeStep++;
+  } else {
+    AllowTransition = false;
   }
   // old way of doing it
   //if (xfadeStep > maxXfade) { xfadeStep = maxXfade; }
@@ -130,4 +134,6 @@ byte Display::getXfadeStep()
 void Display::resetStep()
 {
   xfadeStep = 0;
+  AllowTransition = true;
+  TriggerSet = false;
 }
