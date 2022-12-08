@@ -30,6 +30,8 @@ void setup() {
     clock.fillByHMS(20,13,00);      // H,M,S
     clock.fillDayOfWeek(TUE);
     clock.setTime();
+  } else {
+    clock.getTime();
   }
   CrossfadeSM.setMaxTick (240);
   LeftTubesOn.setNext(TubesOff_L);
@@ -50,17 +52,20 @@ void setup() {
   OCR1A  = 31249;        // Output Compare Register 1A:   16MHz/(f*premult)-1
                          //   62499: 1Hz, or 1S delay
                          //   31249: 2Hz, 15624: 4Hz
-  TIMSK1 |= _BV(OCIE1A); // Timer/Counter1 Interrupt Mask Register
   TCCR2A = B00000010;    // Timer/Counter2 Control Registers A, B, & C - see datasheet
   TCCR2B = B00001100;    // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR2A
   TCNT2  = 0;            // Timer/Counter2: Initialize the counter to 0
   OCR2A  = 24;           // Output Compare Register 2A:   16MHz/(f*premult)-1
                          //    24: 10000Hz, or 100uS delay
                          //    99 with a premult of 8 gives 20000Hz
-  TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register
+  TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register - Enable
 
   sei(); // SEt Interrupts, same as Interrupts();
   cycle_digits();
+  
+  // Delay enabling Timer 1 (Clock chip read) until after warmup cycle
+  TIMSK1 |= _BV(OCIE1A); // Timer/Counter1 Interrupt Mask Register - Enable
+
 }
 
 void loop() {
@@ -76,9 +81,6 @@ void loop() {
     } else {
       display.update (clock.hour, clock.minute, clock.second);
     }
-    display.resetStep();
-    MultiplexSM.resetTick();
-    CrossfadeSM.resetTick();
     TC1IRQ_complete = false;
   }
   
@@ -120,19 +122,21 @@ ISR(TIMER2_COMPA_vect) {
   xfadeTick = CrossfadeSM.getTick();
 
   if (multiplexTick == 0 || multiplexTick == 1) {
+    if (display.TriggerSet && multiplexTick == 0) display.resetStep();
     MultiplexSM.transitionNext();
   }
+
+  if (display.AllowTransition && MultiplexSM.getTick() > display.getXfadeStep()) {
+    CrossfadeSM.transitionTo(Previous);
+  } else {
+    CrossfadeSM.transitionTo(Current);
+  }
+  MultiplexSM.update();
 
   if (xfadeTick == 0) {
     // When the crossfade tick is 0, increment the crossfade pass counter
     display.nextStep();
   }
-  if (MultiplexSM.getTick() <= display.getXfadeStep()) {
-    CrossfadeSM.transitionTo(Current);
-  } else {
-    CrossfadeSM.transitionTo(Previous);
-  }
-  MultiplexSM.update();
 
 // todo: code buttons
 /*
@@ -177,24 +181,24 @@ void update_tube_pair (byte value, byte tube_pair){
 
 void update_left() {
   // Check cross-fade
-#ifdef DEBUG_MODE
-  update_right(); 
-#else 
+//#ifdef DEBUG_MODE
+//  update_right(); 
+//#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
                    : display.getPreviousLeft(), left);
-#endif
+//#endif
 }
 
 void update_center() {
   // Check cross-fade
-#ifdef DEBUG_MODE
-  update_right(); 
-#else 
+//#ifdef DEBUG_MODE
+//  update_right(); 
+//#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
                    : display.getPreviousCenter(), center); 
-#endif
+//#endif
 }
 
 void update_right() {
@@ -210,10 +214,12 @@ void update_right() {
  * of cycling keep it interesting...                           *
  ***************************************************************/
 void cycle_digits() {
-  randomSeed(analogRead(2));  // currently unused pin
+  randomSeed(clock.second); // set the seed with the second for "random" values each start
   int display_type = random(3);
   int x;
 
+  display.update(0,0,0);
+  
   switch (display_type) {
     case 0:  // count up from 0 to 9
       for (int i=0;i<10;i++)
@@ -221,7 +227,7 @@ void cycle_digits() {
         x = i*10 + i;
         // update all the tubes at once
         display.update( x, x, x);
-        hold_display(250000);
+        hold_display(500000);
       }
       break;
     case 1:  // count down from 9 to 0
@@ -230,7 +236,7 @@ void cycle_digits() {
         x = i*10 + i;
         // update all the tubes at once
         display.update( x, x, x);
-        hold_display(250000);
+        hold_display(500000);
       }
       break;
     case 2:  // scroll 000000123456789000000 across display
@@ -240,10 +246,12 @@ void cycle_digits() {
         display.update( pattern[i]/10000,
                         (pattern[i] % 10000) / 100,
                         pattern[i] % 100);
-        hold_display(200000);
+        hold_display(500000);
       }
       break;
   }
+  clock.getTime();
+  display.update (clock.hour, clock.minute, clock.second);  
 }
 /*
 // todo: update this function
@@ -289,6 +297,7 @@ void show_ram(byte addr) {
 void hold_display(unsigned long microseconds) {
   unsigned long step_start_time;
   unsigned long current_micros;
+  // Reset the state machine counters just like in Timer1 interrupt, which isn't enabled yet.
   step_start_time = micros();
   current_micros = micros();
   while(current_micros - step_start_time < microseconds) {

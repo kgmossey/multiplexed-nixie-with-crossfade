@@ -40,6 +40,8 @@ class Display {
     void nextStep();
     byte getXfadeStep();
     void resetStep();
+    bool TriggerSet = false;
+    bool AllowTransition = false;
 
     Display();
     Display(byte xfadeSteps);
