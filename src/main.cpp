@@ -77,9 +77,9 @@ void loop() {
     if (DISPLAY_DATE &&
         display_date_step > DISPLAY_DATE_START &&
         display_date_step <= DISPLAY_DATE_END) {
-      display.update (clock.year, clock.month, clock.dayOfMonth);
+      display.update (clock.year, clock.month, clock.dayOfMonth, Brightness);
     } else {
-      display.update (clock.hour, clock.minute, clock.second);
+      display.update (clock.hour, clock.minute, clock.second, Brightness);
     }
     TC1IRQ_complete = false;
   }
@@ -121,20 +121,20 @@ ISR(TIMER2_COMPA_vect) {
   multiplexTick = MultiplexSM.getTick();
   xfadeTick = CrossfadeSM.getTick();
 
-  if (multiplexTick == 0 || multiplexTick == 1) {
-    if (display.TriggerSet && multiplexTick == 0) display.resetStep();
+  if (multiplexTick == 0 || multiplexTick == Brightness) {
+    if (multiplexTick == 0 && display.TriggerSet) display.resetStep(Brightness);
     MultiplexSM.transitionNext();
   }
 
-  if (display.AllowTransition && MultiplexSM.getTick() > display.getXfadeStep()) {
+  if (display.AllowTransition && (multiplexTick > display.getXfadeStep())) {
     CrossfadeSM.transitionTo(Previous);
   } else {
     CrossfadeSM.transitionTo(Current);
   }
   MultiplexSM.update();
 
+  // When the crossfade tick is 0, increment the crossfade pass counter
   if (xfadeTick == 0) {
-    // When the crossfade tick is 0, increment the crossfade pass counter
     display.nextStep();
   }
 
@@ -181,24 +181,24 @@ void update_tube_pair (byte value, byte tube_pair){
 
 void update_left() {
   // Check cross-fade
-//#ifdef DEBUG_MODE
-//  update_right(); 
-//#else 
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
                    : display.getPreviousLeft(), left);
-//#endif
+#endif
 }
 
 void update_center() {
   // Check cross-fade
-//#ifdef DEBUG_MODE
-//  update_right(); 
-//#else 
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
                    : display.getPreviousCenter(), center); 
-//#endif
+#endif
 }
 
 void update_right() {
@@ -218,7 +218,7 @@ void cycle_digits() {
   int display_type = random(3);
   int x;
 
-  display.update(0,0,0);
+  display.update(0,0,0, Brightness);
   
   switch (display_type) {
     case 0:  // count up from 0 to 9
@@ -226,7 +226,7 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        display.update( x, x, x);
+        display.update( x, x, x, Brightness);
         hold_display(500000);
       }
       break;
@@ -235,7 +235,7 @@ void cycle_digits() {
       {
         x = i*10 + i;
         // update all the tubes at once
-        display.update( x, x, x);
+        display.update( x, x, x, Brightness);
         hold_display(500000);
       }
       break;
@@ -245,13 +245,13 @@ void cycle_digits() {
       for (int i=0; i<15; i++) {
         display.update( pattern[i]/10000,
                         (pattern[i] % 10000) / 100,
-                        pattern[i] % 100);
+                        pattern[i] % 100, Brightness);
         hold_display(500000);
       }
       break;
   }
   clock.getTime();
-  display.update (clock.hour, clock.minute, clock.second);  
+  display.update (clock.hour, clock.minute, clock.second, Brightness);  
 }
 /*
 // todo: update this function

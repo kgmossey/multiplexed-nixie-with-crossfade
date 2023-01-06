@@ -49,6 +49,24 @@ CrossfadeSM:
   states: previous, current
   If MultiplexSM tick <= xfade_pass, set state to current, otherwise previous
 
+MultiplexTick XfadeTick XfadeStep 
+    0            0          0
+    1            1          0
+   ...          ...         0
+    9            9          0
+    0           10          0
+    1           11          0
+   ...          ...         0
+    9           239         0
+    0            0          1
+    1            1          1
+    2            2          1
+   ...          ...         1
+    9           239         1
+    0            0          9
+
+
+
 Old algorithms:
 ~~~~~~~~~~~~~~~
   Display Crossfade:

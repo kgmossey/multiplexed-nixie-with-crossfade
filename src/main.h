@@ -25,9 +25,11 @@
 #define PlusMask       3
 #define MinusMask      4
 #define Pressed        0
+#define BrightnessHi   1
+#define BrightnessMed  4
+#define BrightnessLow  8
 
-#define DEBUG_MODE
-#define CROSSFADE_SPEED     8  // 0-10,
+//#define DEBUG_MODE
 #define DISPLAY_DATE        0  // 1 is show date every x cycles
 #define DISPLAY_DATE_START 11  // If DISPLAY_DATE is 1, show date between
 #define DISPLAY_DATE_END   16  // the start and end values
@@ -88,7 +90,8 @@ State Previous(PreviousValue);
 State Current(CurrentValue);
 FSM CrossfadeSM = FSM(Current);
 
-Display display;
+Display display(10);
+byte Brightness = BrightnessHi;
 
 byte buttons = 0;
 byte display_date_step = 0;
