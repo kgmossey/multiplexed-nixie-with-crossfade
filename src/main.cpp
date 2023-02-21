@@ -19,12 +19,12 @@ void setup() {
   DDRD  |= B00011100;   // Pins 2-4 (D2-D4) set high for output    (---SHM--)
 
   // Button delay times are .1ms
-  btnSettings.init(100, 10000, btnSettingsPressed);
   turn_off_tubes(left + center + right);
   #ifdef DEBUG_MODE
     Serial.begin(38400);
   #endif
   clock.begin();
+    
   if (!clock.isStarted()) {
     clock.fillByYMD(2022,8,19);     // Y,M,D
     clock.fillByHMS(20,13,00);      // H,M,S
@@ -33,6 +33,11 @@ void setup() {
   } else {
     clock.getTime();
   }
+  PowerState.setTrigger(GoToSleep);
+  // todo: Read this value from RAM
+  PowerState.setMaxTick (3000000); // 300 seconds, 5 minutes
+  Settings.setLongPressCallback(GoToSleep, 30000);
+  //PowerState.setMaxTick (14400000); // 4 hours
   CrossfadeSM.setMaxTick (240);
   LeftTubesOn.setNext(TubesOff_L);
   TubesOff_L.setNext(CenterTubesOn);
@@ -43,27 +48,11 @@ void setup() {
   //MultiplexSM.transitionTo(LeftTubesOn);
   //MultiplexSM.transitionNext();
 
-  // Configure timer interrupts every 100uS, 250ms
-  cli(); // CLear Interrupts, same as noInterrupts();
-  TCCR1A = B00000000;    // Timer/Counter1 Control Registers A, B, & C - see datasheet
-  TCCR1B = B00001100;    // Bits 0:2->set premult = 256, Bits 3:4->set compare to OCR1A
-  TCCR1C = B00000000;    // TCCR1C is only FOC flag which are unused
-  TCNT1  = 0;            // Timer/Counter1: Initialize the counter to 0
-  OCR1A  = 31249;        // Output Compare Register 1A:   16MHz/(f*premult)-1
-                         //   62499: 1Hz, or 1S delay
-                         //   31249: 2Hz, 15624: 4Hz
-  TCCR2A = B00000010;    // Timer/Counter2 Control Registers A, B, & C - see datasheet
-  TCCR2B = B00001100;    // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR2A
-  TCNT2  = 0;            // Timer/Counter2: Initialize the counter to 0
-  OCR2A  = 24;           // Output Compare Register 2A:   16MHz/(f*premult)-1
-                         //    24: 10000Hz, or 100uS delay
-                         //    99 with a premult of 8 gives 20000Hz
-  TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register - Enable
-
-  sei(); // SEt Interrupts, same as Interrupts();
+  SetTimerInterrupts();
   cycle_digits();
   
   // Delay enabling Timer 1 (Clock chip read) until after warmup cycle
+  // to prevent reading new times and updating the display
   TIMSK1 |= _BV(OCIE1A); // Timer/Counter1 Interrupt Mask Register - Enable
 
 }
@@ -73,20 +62,25 @@ void loop() {
   if (TC1IRQ_complete) { // 2Hz interrrupt
     // This getTime() call takes slight over 1ms, needs to be handled outside 
     // interrupt because of the way the wire library works.
-    clock.getTime();
-    if (DISPLAY_DATE &&
-        display_date_step > DISPLAY_DATE_START &&
-        display_date_step <= DISPLAY_DATE_END) {
-      display.update (clock.year, clock.month, clock.dayOfMonth);
-    } else {
-      display.update (clock.hour, clock.minute, clock.second);
+    if (!display.setup_mode) {
+      clock.getTime();
+      if (DISPLAY_DATE &&
+          display_date_step > DISPLAY_DATE_START &&
+          display_date_step <= DISPLAY_DATE_END) {
+        display.update (clock.year, clock.month, clock.dayOfMonth);
+      } else {
+        display.update (clock.hour, clock.minute, clock.second);
+      }
     }
     TC1IRQ_complete = false;
   }
   
   if (TC2IRQ_complete) { // 10,000Hz interrupt
-    // Everything handled inside interrupt
-    // Process needs to take < 100us, currently takes ~20us.
+    // Handle button presses!
+    Settings.handle_current_state((SettingsButton == Pressed) ? down : up);
+    Advance.handle_current_state((AdvanceButton == Pressed) ? down : up);
+    Decrease.handle_current_state((DecreaseButton == Pressed) ? down : up);
+  
     TC2IRQ_complete = false;
   }
 
@@ -117,6 +111,7 @@ ISR(TIMER2_COMPA_vect) {
   
   MultiplexSM.tick();
   CrossfadeSM.tick();
+  PowerState.tick();
       
   multiplexTick = MultiplexSM.getTick();
   xfadeTick = CrossfadeSM.getTick();
@@ -137,21 +132,7 @@ ISR(TIMER2_COMPA_vect) {
     // When the crossfade tick is 0, increment the crossfade pass counter
     display.nextStep();
   }
-
-// todo: code buttons
-/*
-  if (SettingsButton == Pressed) {
-    buttons |= _BV(SettingsMask);
-  } else {
-    buttons &= (255 - _BV(SettingsMask));
-  }
-  if (buttons & _BV(SettingsMask)) {
-    btnSettings.set_current_state(down);
-  } else {
-    btnSettings.set_current_state(up);
-  }
-  buttons = 0;
-*/
+ 
   TC2IRQ_complete = true;
 }
 
@@ -173,7 +154,8 @@ void update_tube_pair (byte value, byte tube_pair){
   PORTB = (bcd[value] << 1) & B00111110;
   PORTC = (bcd[value] >> 5) & B00000111;
   // Now we can turn on the tube anode, if it's not in the off cycle of a flashing event
-  if (!display.flash) {
+  // and it's power state is On (ie not "Sleeping")
+  if (!display.flash && PowerState.isInState(On)) {
     PORTD |= tube_pair;
   }
 
@@ -181,24 +163,24 @@ void update_tube_pair (byte value, byte tube_pair){
 
 void update_left() {
   // Check cross-fade
-//#ifdef DEBUG_MODE
-//  update_right(); 
-//#else 
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
                    : display.getPreviousLeft(), left);
-//#endif
+#endif
 }
 
 void update_center() {
   // Check cross-fade
-//#ifdef DEBUG_MODE
-//  update_right(); 
-//#else 
+#ifdef DEBUG_MODE
+  update_right(); 
+#else 
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
                    : display.getPreviousCenter(), center); 
-//#endif
+#endif
 }
 
 void update_right() {
@@ -305,19 +287,75 @@ void hold_display(unsigned long microseconds) {
   }
 }
 
-void btnSettingsPressed() {
-  display.flash = false;
+void SettingsButtonPressed() {
+  PowerState.resetTick();
+
+  if (PowerState.isInState(Sleeping)) {
+    PowerState.transitionTo(On);
+    display.setup_mode = false;
+    SettingsSM.transitionTo(NormalDisplay);
+    Settings.setWakeUpOverride();
+    return;
+  } 
+
+  else 
+
+  {
+
+  }
+  if (display.setup_mode) {
+    clock.setTime();
+  } 
+
+  // toggle setup_mode
   display.setup_mode = !display.setup_mode;
+  
 }
 
-void btnForwardPressed() {
-
+void AdvanceButtonPressed() {
+  if (display.setup_mode) {
+    clock.second++;
+    if (clock.second == 60) { clock.second = 0; clock.minute++; }
+    if (clock.minute == 60) { clock.minute = 0; clock.hour++; }
+    if (clock.hour == 24) { clock.hour = 0; }
+    display.update (clock.hour, clock.minute, clock.second);
+  }
 }
 
-void btnBackPressed() {
-
+void DecreaseButtonPressed() {
+  if (display.setup_mode) {
+    clock.second--;
+    if (clock.second == 0) { clock.second = 59; clock.minute--; }
+    if (clock.minute == 0) { clock.minute = 59; clock.hour--; }
+    if (clock.hour == 0) { clock.hour = 23; }
+    display.update (clock.hour, clock.minute, clock.second);
+  }
 }
 
-void btnPowerPressed() {
+void GoToSleep() {
+  display.setup_mode = false;
+  PowerState.transitionTo(Sleeping);
+}
 
+void SetTimerInterrupts() {
+  // Configure timer interrupts every 100uS, 250ms
+
+  cli(); // CLear Interrupts, same as noInterrupts();
+  TCCR1A = B00000000;    // Timer/Counter1 Control Registers A, B, & C - see datasheet
+  TCCR1B = B00001100;    // Bits 0:2->set premult = 256, Bits 3:4->set compare to OCR1A
+  TCCR1C = B00000000;    // TCCR1C is only FOC flag which are unused
+  TCNT1  = 0;            // Timer/Counter1: Initialize the counter to 0
+  OCR1A  = 31249;        // Output Compare Register 1A:   16MHz/(f*premult)-1
+                         //   62499: 1Hz, or 1S delay
+                         //   31249: 2Hz, 15624: 4Hz
+  TCCR2A = B00000010;    // Timer/Counter2 Control Registers A, B, & C - see datasheet
+  TCCR2B = B00001100;    // Bits 0:2->set premult = 64, Bits 3:4->set compare to OCR2A
+  TCNT2  = 0;            // Timer/Counter2: Initialize the counter to 0
+  OCR2A  = 24;           // Output Compare Register 2A:   16MHz/(f*premult)-1
+                         //    24: 10000Hz, or 100uS delay
+                         //    99 with a premult of 8 gives 20000Hz
+  TIMSK2 |= _BV(OCIE2A); // Timer/Counter2 Interrupt Mask Register - Enable
+
+  sei(); // SEt Interrupts, same as Interrupts();
+  
 }

@@ -113,20 +113,26 @@ FiniteStateMachine& FiniteStateMachine::transitionTo(State& state){
 }
 
 void FiniteStateMachine::tick() {
-		index++;
-		if (index==maxTick)
+	index++;
+	if (index==maxTick) {
+		if (!Trigger) {
 			index = 0;
+		} else {
+			Trigger();
+			// todo: decide if index should be reset to 0 here.
+		}
+	}
 }
 
 void FiniteStateMachine::resetTick() {
-		index = 0;
+	index = 0;
 }
 
 byte FiniteStateMachine::getTick() {
 	return index;
 }
 
-void FiniteStateMachine::setMaxTick(byte value) {
+void FiniteStateMachine::setMaxTick(unsigned long value) {
 	maxTick = value;
 }
 
@@ -163,6 +169,12 @@ boolean FiniteStateMachine::isInState( State &state ) const {
 		return false;
 	}
 }
+
+// The trigger function is called when the index reaches max tick, if set
+void FiniteStateMachine::setTrigger(void (*TriggerFunction)()){
+	Trigger = TriggerFunction;
+}
+
 
 unsigned long FiniteStateMachine::timeInCurrentState() {
 	return millis() - stateChangeTime;

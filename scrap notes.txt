@@ -69,3 +69,72 @@ Programming:
      5v -N/A-      | Ensure board is powered
 
 
+
+ClockSM:
+Behavior - Two timers, one every 1/2 second, the other every other 1000th of a second. Button needs detection faster than 1/2 second so need to use the faster timer. Needs some level of debounce.
+
+Need an allow repeat property. 
+
+Pressing Settings button, once debounce is completed, should not fire anything else until pressed again.  Pressing settings button should advance to the next setting, in the order of:
+  1- Hours (0-23)
+  2- Minutes (0-59)
+  3- Seconds (0-59)
+  4- Year (Range of chip)
+  5- Month (1-12)
+  6- Day (1-31, depending on Month)
+  7- Brightness (1-8)
+  8- Sleep Hours/Minutes (0-8:00)
+  9- TBD
+Settings should return to time display after no input for 10 seconds.
+If in settings mode, double clicking settings should return to previous setting.  Double click is two presses of x1-x2 duration separated by y1-y2 ms.  
+
+/* todo: research double click time? */ 
+Pressing advance/decrease buttons should advance setting by:
+  - 1/800ms for the first 5 seconds
+  - 1/400ms for next 3 seconds
+  - 1/200ms for next 2 seconds
+  - 1/100ms for remainder of time 
+  From 0:
+  1-5    5 seconds
+  6-9    8 seconds
+  10-13 10 seconds 
+  14-59 21.5 seconds 
+
+Ceate a callback function to trigger a button press.  Use the update function?
+
+
+Timer settings pre initialization
+TCCR1A 1
+TCCR1B 3
+TCCR1C 0
+TCNT1 18
+OCR1A 0
+TCCR2A 1
+TCCR2B 4
+TCNT2 19
+OCRA 0
+TIMSK2 0
+TIMSK1 0
+
+Timer settings post initialization:
+TCCR1A 0
+TCCR1B 12
+TCCR1C 0
+TCNT1 603
+OCR1A 31249
+TCCR2A 2
+TCCR2B 12
+TCNT2 12
+OCRA 24
+TIMSK2 2
+TIMSK1 2
+
+Current todo: 
+- Create a settings state machine, per above states
+- Turn off setup mode after 10 seconds of inactivity
+- Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
+- Cycle through minutes
+
+debounce
+single press, no repeat
+long press repeat
