@@ -10,3 +10,6 @@ test/README
 .DS_Store
 debug_output
 .vscode/
+direct write port values.xlsx
+debug.txt
+Nixie Clock Workspace.code-workspace

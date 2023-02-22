@@ -72,7 +72,7 @@ class FiniteStateMachine {
 		// made transitionTo work like the following
 		//FiniteStateMachine& immediateTransitionTo( State& state );
 		void tick();
-		void setMaxTick(byte value);
+		void setMaxTick(unsigned long value);
 		byte getTick();
 		void resetTick();
 
@@ -82,6 +82,7 @@ class FiniteStateMachine {
 		byte getPreviousStateID();
 		void transitionNext();
 		boolean isInState( State &state ) const;
+		void setTrigger(void (*TriggerFunction)());
 
 		unsigned long timeInCurrentState();
 
@@ -90,9 +91,10 @@ class FiniteStateMachine {
 		State* 	previousState;
 		State* 	currentState;
 		State* 	nextState;
+		void (*Trigger)();
 		unsigned long stateChangeTime;
-		byte index = 0;
-		byte maxTick = 10;
+		unsigned long index = 0;
+		unsigned long maxTick = 10;
 };
 
 #endif

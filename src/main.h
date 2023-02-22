@@ -12,22 +12,21 @@
 #include "display.h"
 
 // define masks
-#define left           8             // pin 3 mask, bit 3
-#define center         4             // pin 2 mask, bit 2
-#define right          16            // pin 4 mask, bit 4
-#define none           0             // no pins
-#define SleepButton    (PINB & 0x01) // Pin 14 (D8)
-#define SettingsButton (PIND & 0x80) // Pin 13 (D7)
-#define PlusButton     (PIND & 0x40) // Pin 12 (D6)
-#define MinusButton    (PIND & 0x20) // Pin 11 (D5)
-#define SleepMask      1
-#define SettingsMask   2
-#define PlusMask       3
-#define MinusMask      4
-#define Pressed        0
-#define BrightnessHi   1
-#define BrightnessMed  4
-#define BrightnessLow  8
+#define left            8             // pin 3 mask, bit 3
+#define center          4             // pin 2 mask, bit 2
+#define right           16            // pin 4 mask, bit 4
+#define none            0             // no pins
+#define SleepButton     (PINB & 0x01) // Pin 14 (D8)
+#define SettingsButton  (PIND & 0x80) // Pin 13 (D7)
+#define AdvanceButton   (PIND & 0x40) // Pin 12 (D6)
+#define DecreaseButton  (PIND & 0x20) // Pin 11 (D5)
+#define SettingsMask    2
+#define PlusMask        3
+#define MinusMask       4
+#define Pressed         0
+#define BrightnessHi    1
+#define BrightnessMed   4
+#define BrightnessLow   8
 
 //#define DEBUG_MODE
 #define DISPLAY_DATE        0  // 1 is show date every x cycles
@@ -46,16 +45,24 @@ void update_left();
 void update_center();
 void update_right();
 void hold_display(unsigned long microseconds);
-void btnSettingsPressed();
-void btnForwardPressed();
-void btnBackPressed();
-void btnPowerPressed();
+void SettingsButtonPressed();
+void AdvanceButtonPressed();
+void DecreaseButtonPressed();
+void GoToSleep();
+void SetTimerInterrupts();
 
 /********************
  * Global variables *
  ********************/
 DS1307 clock; //define a object of DS1307 class
-Button btnSettings;
+unsigned int button_repeat_pattern[24] = { 15000, 8000, 8000, 8000, 8000, 8000, 
+                                           4000, 4000, 4000, 4000, 4000, 4000, 4000, 
+                                           2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 
+                                           1000 };
+//unsigned int test_pattern [3] = { 1000, 500, 250};
+Button Settings (SettingsButtonPressed);
+Button Advance (AdvanceButtonPressed, button_repeat_pattern, 24);
+Button Decrease (DecreaseButtonPressed, button_repeat_pattern, 24);
 // Create an index of binary coded decimal values to easily reference two digit numbers
 byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04 05 06 07 08 09
                   8, 136, 40, 168, 24, 152, 56, 184, 72, 200,  // 10 11 12 13 14 15 16 17 18 19
@@ -73,11 +80,6 @@ byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // 
 byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
 bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interrupt Complete
 
-enum CrossfadeStates {
-  PreviousValue,
-  CurrentValue
-};
-
 State LeftTubesOn (left, update_left);
 State TubesOff_L (none, turn_off_all_tubes);
 State CenterTubesOn (center, update_center);
@@ -86,9 +88,46 @@ State RightTubesOn (right, update_right);
 State TubesOff_R (none, turn_off_all_tubes);
 FSM MultiplexSM = FSM(TubesOff_L);
 
+enum PowerStates {
+  psSleeping,
+  psOn 
+};
+
+State Sleeping(psSleeping); 
+State On(psOn); 
+FSM PowerState(On);
+
+enum CrossfadeStates {
+  PreviousValue,
+  CurrentValue
+};
+
 State Previous(PreviousValue);
 State Current(CurrentValue);
 FSM CrossfadeSM = FSM(Current);
+
+enum SettingsStates {
+  normaldisplay,
+  sethours,
+  setminutes,
+  setseconds,
+  setyear,
+  setmonth,
+  setday,
+  setbrightness,
+  setsleep
+};
+
+State NormalDisplay(normaldisplay);
+State SetHours(sethours);
+State SetMinutes(setminutes);
+State SetSeconds(setseconds);
+State SetYear(setyear); // (Range of chip)
+State SetMonth(setmonth);
+State SetDay(setday);// (1-31, depending on Month)
+State SetBrightness(setbrightness); // 1-8
+State SetSleep(setsleep);
+FSM SettingsSM = FSM(NormalDisplay);
 
 Display display(10);
 byte Brightness = BrightnessHi;
