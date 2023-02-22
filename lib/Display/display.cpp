@@ -76,12 +76,12 @@ Display::Display(byte xfadeSteps)
   maxXfade = xfadeSteps;
 }
 
-void Display::update(byte Left, byte Center, byte Right)
+void Display::update(byte Left, byte Center, byte Right, byte brightness)
 {
   previous = current;
   TriggerSet = true;
   current.setAll(Left, Center, Right);
-  xfadeStep = 0;
+  xfadeStep = brightness-1; 
 }
 
 byte Display::getPreviousLeft()
@@ -131,9 +131,9 @@ byte Display::getXfadeStep()
   return xfadeStep;
 }
 
-void Display::resetStep()
+void Display::resetStep(byte brightness)
 {
-  xfadeStep = 0;
+  xfadeStep = brightness-1;
   AllowTransition = true;
   TriggerSet = false;
 }

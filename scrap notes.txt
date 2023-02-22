@@ -37,15 +37,35 @@ MultiplexSM:
     - LeftTubesOn -> TubesOff_L -> CenterTubesOn -> TubesOff_C -> RightTubesOn -> TubesOff_R -> LeftTubesOn
 
 Date display:
-If DISPLAY_DATE == 1 then the date will be displayed every 5 seconds for 3 seconds.
-This is configurable with DISPLAY_DATE_START and DISPLAY_DATE_END.
-  -Every half second display_date_step increases by one.
-  -After 8 seconds display_date_step resets to zero (16 ticks).
+  If DISPLAY_DATE == 1 then the date will be displayed every 5 seconds for 3 seconds.
+  This is configurable with DISPLAY_DATE_START and DISPLAY_DATE_END.
+    -Every half second display_date_step increases by one.
+    -After 8 seconds display_date_step resets to zero (16 ticks).
+  States: Time, Date, TimeSet, DateSet, Settings
+  User configurable settings: Show Date, Crossfade speed 
 
 CrossfadeSM:
   Set max tick count to 240 or 250. When it reaches max, reset to 0 and increment xfade_pass
   states: previous, current
   If MultiplexSM tick <= xfade_pass, set state to current, otherwise previous
+
+MultiplexTick XfadeTick XfadeStep 
+    0            0          0
+    1            1          0
+   ...          ...         0
+    9            9          0
+    0           10          0
+    1           11          0
+   ...          ...         0
+    9           239         0
+    0            0          1
+    1            1          1
+    2            2          1
+   ...          ...         1
+    9           239         1
+    0            0          9
+
+
 
 Old algorithms:
 ~~~~~~~~~~~~~~~
@@ -65,3 +85,5 @@ Programming:
        Gnd         |          8
       Reset        | Chip pin 1 (direct cxn)
      5v -N/A-      | Ensure board is powered
+
+

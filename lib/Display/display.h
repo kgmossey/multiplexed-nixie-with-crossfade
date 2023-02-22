@@ -36,10 +36,10 @@ class Display {
     byte getCurrentLeft();
     byte getCurrentCenter();
     byte getCurrentRight();
-    void update(byte Left, byte Center, byte Right);
+    void update(byte Left, byte Center, byte Right, byte brightness);
     void nextStep();
     byte getXfadeStep();
-    void resetStep();
+    void resetStep(byte brightness);
     bool TriggerSet = false;
     bool AllowTransition = false;
 
