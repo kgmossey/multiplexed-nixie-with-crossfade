@@ -1,3 +1,4 @@
+//#define DEBUG_MODE
 #ifndef NIXIE_H
 #define NIXIE_H
 
@@ -28,7 +29,6 @@
 #define BrightnessMed   4
 #define BrightnessLow   8
 
-//#define DEBUG_MODE
 #define DISPLAY_DATE        0  // 1 is show date every x cycles
 #define DISPLAY_DATE_START 11  // If DISPLAY_DATE is 1, show date between
 #define DISPLAY_DATE_END   16  // the start and end values

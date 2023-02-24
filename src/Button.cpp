@@ -1,5 +1,7 @@
 #include "Button.h"
-#include <Arduino.h>
+#ifdef DEBUG_MODE
+  #include <Arduino.h>
+#endif
 
 Button::Button (void (*CallbackFunction)()) {
   Button_Click_Handler = CallbackFunction;
@@ -33,14 +35,14 @@ void Button::handle_current_state(ButtonStates current_state) {
     return;
   }
 
-  // If using the settings button to wake up from a sleep state, we don't want it to go back to sleep!
-  if (wake_up_override) { return; }
-
   // Then debounce the button
   if (debounce_counter < debounce_trigger) {
     debounce_counter++;
     return;
   }
+
+  // If using the settings button to wake up from a sleep state, we don't want it to go back to sleep!
+  if (wake_up_override) { return; }
   
   // Kick it out if it's already pressed and it's not supposed to repeat or 
   // long click has already triggered
@@ -48,12 +50,16 @@ void Button::handle_current_state(ButtonStates current_state) {
       (Long_Click_Handler && repeat_counter > long_press_trigger)) {
     return;
   }
-  //Serial.print(long_press_trigger); Serial.print (" "); Serial.print(repeat_counter); Serial.print (" "); Serial.println(repeat);
-  
+  #ifdef DEBUG_MODE
+    //Serial.print(long_press_trigger); Serial.print (" "); Serial.print(repeat_counter); Serial.print (" "); Serial.println(repeat);
+  #endif
+
   // Single button press, or repeat button press
   if (repeat_counter == 0) {
     repeat_counter++;
-    Serial.println("Button");
+    #ifdef DEBUG_MODE
+      Serial.println("Button");
+    #endif
     Button_Click_Handler();
     return;
   }

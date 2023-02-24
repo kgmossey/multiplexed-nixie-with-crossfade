@@ -313,6 +313,8 @@ void SettingsButtonPressed() {
 }
 
 void AdvanceButtonPressed() {
+  PowerState.resetTick();
+
   if (display.setup_mode) {
     clock.second++;
     if (clock.second == 60) { clock.second = 0; clock.minute++; }
@@ -323,6 +325,8 @@ void AdvanceButtonPressed() {
 }
 
 void DecreaseButtonPressed() {
+  PowerState.resetTick();
+
   if (display.setup_mode) {
     clock.second--;
     if (clock.second == 0) { clock.second = 59; clock.minute--; }
