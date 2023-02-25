@@ -53,6 +53,7 @@ class State {
 		void exit();
 		State& getNext();
 		void setNext(State& next);
+		virtual bool operator==(State& rhs) ;
 
 	private:
 		byte id;
@@ -69,11 +70,10 @@ class FiniteStateMachine {
 
 		FiniteStateMachine& update();
 		FiniteStateMachine& transitionTo( State& state );
-		// made transitionTo work like the following
-		//FiniteStateMachine& immediateTransitionTo( State& state );
 		void tick();
 		void setMaxTick(unsigned long value);
-		byte getTick();
+		unsigned long getMaxTick();
+		unsigned long getTick();
 		void resetTick();
 
 		State& getCurrentState();

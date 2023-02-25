@@ -25,6 +25,8 @@ Button::Button (void (*CallbackFunction)(), unsigned int *Repeat, unsigned int s
 }
 
 void Button::handle_current_state(ButtonStates current_state) {
+  button_state = current_state;
+
   // If the button is up, exit quickly. This is the default state, so doing it first results 
   // in the least processing
   if (current_state == up) {
@@ -99,4 +101,8 @@ void Button::setLongPressCallback(void (*CallbackFunction)(), unsigned int ticks
 
 void Button::setWakeUpOverride() {
   wake_up_override = true;
+}
+
+ButtonStates Button::get_current_state() {
+  return button_state;
 }

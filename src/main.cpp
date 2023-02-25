@@ -34,10 +34,15 @@ void setup() {
     clock.getTime();
   }
   PowerState.setTrigger(GoToSleep);
-  // todo: Read this value from RAM
-  PowerState.setMaxTick (3000000); // 300 seconds, 5 minutes
+  PowerState.setMaxTick ( ((unsigned long)clock.getRamAddress(1)<<24) + 
+                          ((unsigned long)clock.getRamAddress(2)<<16) + 
+                          ((unsigned long)clock.getRamAddress(3)<<8) + 
+                           (unsigned long)clock.getRamAddress(4));
+  Brightness = clock.getRamAddress(0);
+  if (Brightness<1) { Brightness = 1; }
+  if (Brightness>8) { Brightness = 8; }
+  // todo: get following from ram
   Settings.setLongPressCallback(GoToSleep, 30000);
-  //PowerState.setMaxTick (14400000); // 4 hours
   CrossfadeSM.setMaxTick (240);
   LeftTubesOn.setNext(TubesOff_L);
   TubesOff_L.setNext(CenterTubesOn);
@@ -45,9 +50,7 @@ void setup() {
   TubesOff_C.setNext(RightTubesOn);
   RightTubesOn.setNext(TubesOff_R);
   TubesOff_R.setNext(LeftTubesOn);
-  //MultiplexSM.transitionTo(LeftTubesOn);
-  //MultiplexSM.transitionNext();
-
+  
   SetTimerInterrupts();
   cycle_digits();
   
@@ -62,7 +65,7 @@ void loop() {
   if (TC1IRQ_complete) { // 2Hz interrrupt
     // This getTime() call takes slight over 1ms, needs to be handled outside 
     // interrupt because of the way the wire library works.
-    if (!display.setup_mode) {
+    if (SettingsSM.getCurrentState() == NormalDisplay) {
       clock.getTime();
       if (DISPLAY_DATE &&
           display_date_step > DISPLAY_DATE_START &&
@@ -93,10 +96,10 @@ ISR(TIMER1_COMPA_vect) {
   display_date_step++;
   if (display_date_step == DISPLAY_DATE_END) { display_date_step = 0; }
 
-  if (display.setup_mode) {
-    display.flash = !display.flash;
-  } else {
+  if (SettingsSM.getCurrentState() == NormalDisplay) {
     display.flash = false;
+  } else {
+    display.flash = !display.flash;
   }
   TC1IRQ_complete = true;
 }
@@ -136,8 +139,6 @@ ISR(TIMER2_COMPA_vect) {
   TC2IRQ_complete = true;
 }
 
-
-
 void turn_off_all_tubes () {
   turn_off_tubes(left + center + right);
 }
@@ -153,41 +154,139 @@ void update_tube_pair (byte value, byte tube_pair){
   turn_off_tubes(tube_pair);
   PORTB = (bcd[value] << 1) & B00111110;
   PORTC = (bcd[value] >> 5) & B00000111;
+  /* moving this code to each tube pair to account for settings state
   // Now we can turn on the tube anode, if it's not in the off cycle of a flashing event
   // and it's power state is On (ie not "Sleeping")
   if (!display.flash && PowerState.isInState(On)) {
     PORTD |= tube_pair;
-  }
+  }*/
 
 }
 
 void update_left() {
-  // Check cross-fade
 #ifdef DEBUG_MODE
-  update_right(); 
-#else 
+  switch (SettingsSM.getCurrentStateId()) {
+    case setminutes:
+      update_center();
+      return;
+      break;
+    case normaldisplay:
+    case setseconds:
+    case setyear:
+    case setmonth:
+    case setday:
+    case setbrightness:
+    case setsleep:
+      update_right();
+      return;
+    case sethours:
+      ; // do nothing
+  }
+#endif
+  // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
                    : display.getPreviousLeft(), left);
-#endif
+  if (PowerState.isInState(Sleeping)) { return; }
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+    case setminutes:
+    case setseconds:
+    case setyear:
+    case setmonth:
+    case setday:
+    case setbrightness:
+    case setsleep:
+      PORTD |= left; 
+      break;
+    case sethours:
+      if (Advance.get_current_state() == down || Decrease.get_current_state() == down || !display.flash) { 
+        PORTD |= left; 
+      }
+  }
+
+
 }
 
 void update_center() {
-  // Check cross-fade
 #ifdef DEBUG_MODE
-  update_right(); 
-#else 
+  switch (SettingsSM.getCurrentStateId()) {
+    case sethours:
+      update_left();
+      return;  
+    case normaldisplay:
+    case setseconds:
+    case setyear:
+    case setmonth:
+    case setday:
+    case setbrightness:
+    case setsleep:
+      update_right();
+      return;
+    case setminutes:
+      ; // do nothing
+  }    
+#endif
+  // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
                    : display.getPreviousCenter(), center); 
-#endif
+  if (PowerState.isInState(Sleeping)) { return; }
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+    case sethours:
+    case setminutes:
+    case setseconds:
+    case setyear:
+      if ((SettingsSM.getCurrentState() == SetMinutes || SettingsSM.getCurrentState() == SetYear) && 
+           Advance.get_current_state() == up && Decrease.get_current_state() == up && display.flash) {
+          return;
+        } 
+      if (PowerState.isInState(On)) { PORTD |= center; }
+  }
 }
 
 void update_right() {
+#ifdef DEBUG_MODE
+  switch (SettingsSM.getCurrentStateId()) {
+    case sethours:
+      update_left();
+      return;  
+    case setminutes:
+      update_center();
+      return;
+    case normaldisplay:
+    case setseconds:
+    case setyear:
+    case setmonth:
+    case setday:
+    case setbrightness:
+    case setsleep:
+      ; // do nothing
+  }    
+#endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentRight()
                    : display.getPreviousRight(), right);
+  if (PowerState.isInState(Sleeping)) { return; }
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+    case sethours:
+    case setminutes:
+      PORTD |= right; 
+      break;
+    case setseconds:
+    case setyear:
+    case setmonth:
+    case setday:
+    case setbrightness:
+    case setsleep:
+      if (Advance.get_current_state() == down || Decrease.get_current_state() == down || !display.flash) { 
+        PORTD |= right; 
+      }
+  }
+  
 }
 
 /***************************************************************
@@ -234,7 +333,9 @@ void cycle_digits() {
   }
   clock.getTime();
   display.update (clock.hour, clock.minute, clock.second, Brightness);  
+
 }
+
 /*
 // todo: update this function
 void show_ram(byte addr) {
@@ -301,39 +402,126 @@ void SettingsButtonPressed() {
   else 
 
   {
+    switch (SettingsSM.getCurrentStateId()) {
+      case normaldisplay:
+        SettingsSM.transitionTo(SetHours);
+        break;
+      case sethours:
+        SettingsSM.transitionTo(SetMinutes);
+        clock.setTime();
+        break;
+      case setminutes:
+        SettingsSM.transitionTo(SetSeconds);
+        clock.setTime();
+        break;
+      case setseconds:
+        SettingsSM.transitionTo(SetYear);
+        clock.setTime();
+        break;
+      case setyear:
+        SettingsSM.transitionTo(SetMonth);
+        clock.setTime();
+        break;
+      case setmonth:
+        SettingsSM.transitionTo(SetDay);
+        clock.setTime();
+        break;
+      case setday:
+        SettingsSM.transitionTo(SetBrightness);
+        clock.setTime();
+        break;
+      case setbrightness:
+        SettingsSM.transitionTo(SetSleep);
+        clock.setRamAddress(0, Brightness);
+        break;
+      case setsleep:
+        SettingsSM.transitionTo(NormalDisplay);
+        clock.setRamAddress(1, ((PowerState.getMaxTick()/10000) >> 24) & 0xFF);
+        clock.setRamAddress(2, ((PowerState.getMaxTick()/10000) >> 16) & 0xFF);
+        clock.setRamAddress(3, ((PowerState.getMaxTick()/10000) >> 8) & 0xFF);
+        clock.setRamAddress(4, (PowerState.getMaxTick()/10000) & 0xFF);        
+    } 
 
   }
-  if (display.setup_mode) {
-    clock.setTime();
-  } 
-
-  // toggle setup_mode
-  display.setup_mode = !display.setup_mode;
+  UpdateSetupDisplay();
   
 }
 
 void AdvanceButtonPressed() {
   PowerState.resetTick();
 
-  if (display.setup_mode) {
-    clock.second++;
-    if (clock.second == 60) { clock.second = 0; clock.minute++; }
-    if (clock.minute == 60) { clock.minute = 0; clock.hour++; }
-    if (clock.hour == 24) { clock.hour = 0; }
-    display.update (clock.hour, clock.minute, clock.second, Brightness);
-  }
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+      // do nothing
+      break;
+    case sethours:
+      clock.hour++;
+      break;
+    case setminutes:
+      clock.minute++;
+      break;
+    case setseconds:
+      clock.second++;
+      break;
+    case setyear:
+      clock.year++;
+      break;
+    case setmonth:
+      clock.month++;
+      break;
+    case setday:
+      clock.dayOfMonth++;
+      clock.dayOfWeek++;
+      break;
+    case setbrightness:
+      Brightness++;
+      break;
+    case setsleep:
+      unsigned long sleep_minutes = PowerState.getMaxTick()/600000;
+      PowerState.setMaxTick(++sleep_minutes*600000);
+  } 
+
+  ValidateInputs();
+  UpdateSetupDisplay();
+  
 }
 
 void DecreaseButtonPressed() {
   PowerState.resetTick();
 
-  if (display.setup_mode) {
-    clock.second--;
-    if (clock.second == 0) { clock.second = 59; clock.minute--; }
-    if (clock.minute == 0) { clock.minute = 59; clock.hour--; }
-    if (clock.hour == 0) { clock.hour = 23; }
-    display.update (clock.hour, clock.minute, clock.second, Brightness);
-  }
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+      // do nothing
+      break;
+    case sethours:
+      clock.hour--;
+      break;
+    case setminutes:
+      clock.minute--;
+      break;
+    case setseconds:
+      clock.second--;
+      break;
+    case setyear:
+      clock.year--;
+      break;
+    case setmonth:
+      clock.month--;
+      break;
+    case setday:
+      clock.dayOfMonth--;
+      clock.dayOfWeek--;
+      break;
+    case setbrightness:
+      Brightness--;
+      break;
+    case setsleep:
+      unsigned long sleep_minutes = PowerState.getMaxTick()/600000;
+      PowerState.setMaxTick(--sleep_minutes*600000);
+  } 
+
+  ValidateInputs();
+  UpdateSetupDisplay();
 }
 
 void GoToSleep() {
@@ -362,4 +550,78 @@ void SetTimerInterrupts() {
 
   sei(); // SEt Interrupts, same as Interrupts();
   
+}
+
+void ValidateInputs() {
+  if (clock.second == 60 ) { clock.second = 0;  clock.minute++; }
+  if (clock.second == 255) { clock.second = 59; clock.minute--; }
+  if (clock.minute == 60 ) { clock.minute = 0;  clock.hour++; }
+  if (clock.minute == 255) { clock.minute = 59; clock.hour--; }
+  if (clock.hour == 24 )   { clock.hour = 0;  }
+  if (clock.hour == 255)   { clock.hour = 23; }
+  // handle various length months for dayOfMonth validation
+  switch (clock.month) {
+    case 1:  // January
+    case 3:  // March
+    case 5:  // May
+    case 7:  // July
+    case 8:  // August
+    case 10: // October
+    case 12: // December
+      if (clock.dayOfMonth == 32 ) { clock.dayOfMonth = 0;  clock.month++; }
+      if (clock.dayOfMonth == 255) { clock.dayOfMonth = 31; clock.month--; }
+      break;
+    case 4:  // April
+    case 6:  // June, the best month
+    case 9:  // September
+    case 11: // Novemeber
+      if (clock.dayOfMonth == 31 ) { clock.dayOfMonth = 0;  clock.month++; }
+      if (clock.dayOfMonth == 255) { clock.dayOfMonth = 30; clock.month--; }
+      break;
+    case 2:  // February
+      if (clock.year % 4) {
+        if (clock.dayOfMonth == 29 ) { clock.dayOfMonth = 0;  clock.month++; }
+        if (clock.dayOfMonth == 255) { clock.dayOfMonth = 28; clock.month--; }
+      } else {
+        if (clock.dayOfMonth == 30 ) { clock.dayOfMonth = 0;  clock.month++; }
+        if (clock.dayOfMonth == 255) { clock.dayOfMonth = 28; clock.month--; }
+      }
+  }
+  if (clock.month == 13 ) { clock.month = 0; clock.year++; }
+  if (clock.month == 255) { clock.month = 12; clock.year--; }
+  if (clock.year == 1999) { clock.year = 2000; }
+  if (clock.year == 2100) { clock.year = 2099; }
+
+  if (Brightness == 0) { Brightness = 1; }
+  if (Brightness == 9) { Brightness = 8; }
+
+  // todo: set 0 = to permanently on
+  if (PowerState.getMaxTick() == 0) { PowerState.setMaxTick(60000); }
+  if (PowerState.getMaxTick() > 360000000) { PowerState.setMaxTick(360000000); }
+}
+
+void UpdateSetupDisplay() {
+  switch (SettingsSM.getCurrentStateId()) {
+    case normaldisplay:
+    case sethours:
+    case setminutes:
+    case setseconds:
+      display.update (clock.hour, clock.minute, clock.second, Brightness);
+      break;
+    case setyear:
+      display.update (1, 20, clock.year%100, Brightness );
+      break;
+    case setmonth:
+      display.update (2, 0, clock.month, Brightness );
+      break;
+    case setday:
+      display.update (3, 0, clock.dayOfMonth, Brightness );
+      break;
+    case setbrightness:
+      display.update (4, 0, Brightness, Brightness );
+      break;
+    case setsleep:
+      display.update (5, 0, PowerState.getMaxTick()/600000, Brightness );
+      // 60 seconds/minute, 10000 ticks/second
+  }
 }

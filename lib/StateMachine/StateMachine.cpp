@@ -69,6 +69,10 @@ void State::setNext(State& next) {
 	nextState = &next;
 }
 
+bool State::operator==(State& rhs)  {
+	return id == rhs.getID();
+}
+
 //END FINITE STATE
 
 
@@ -128,12 +132,16 @@ void FiniteStateMachine::resetTick() {
 	index = 0;
 }
 
-byte FiniteStateMachine::getTick() {
+unsigned long FiniteStateMachine::getTick() {
 	return index;
 }
 
 void FiniteStateMachine::setMaxTick(unsigned long value) {
 	maxTick = value;
+}
+
+unsigned long FiniteStateMachine::getMaxTick() {
+	return maxTick;
 }
 
 //return the current state

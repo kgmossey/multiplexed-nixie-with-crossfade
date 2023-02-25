@@ -94,14 +94,14 @@ Behavior - Two timers, one every 1/2 second, the other every other 1000th of a s
 Need an allow repeat property. 
 
 Pressing Settings button, once debounce is completed, should not fire anything else until pressed again.  Pressing settings button should advance to the next setting, in the order of:
-  1- Hours (0-23)
-  2- Minutes (0-59)
-  3- Seconds (0-59)
-  4- Year (Range of chip)
-  5- Month (1-12)
-  6- Day (1-31, depending on Month)
-  7- Brightness (1-8)
-  8- Sleep Hours/Minutes (0-8:00)
+  0- Hours (0-23)
+  0- Minutes (0-59)
+  0- Seconds (0-59)
+  1- Year (Range of chip)
+  2- Month (1-12)
+  3- Day (1-31, depending on Month)
+  4- Brightness (1-8)
+  5- Sleep Hours/Minutes (0-8:00)
   9- TBD
 Settings should return to time display after no input for 10 seconds.
 If in settings mode, double clicking settings should return to previous setting.  Double click is two presses of x1-x2 duration separated by y1-y2 ms.  
@@ -153,6 +153,9 @@ Current todo:
 - Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
 - Cycle through minutes
 
-debounce
-single press, no repeat
-long press repeat
+todo: 
+- test debounce (double clicks?)
+- settings exit shortcut (instead of autosleep have it return to showing time)
+- run anti-burn code
+- fix year set
+- test load settings from memory

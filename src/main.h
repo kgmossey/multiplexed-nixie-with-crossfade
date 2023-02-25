@@ -50,6 +50,9 @@ void AdvanceButtonPressed();
 void DecreaseButtonPressed();
 void GoToSleep();
 void SetTimerInterrupts();
+void SetTimerInterrupts();
+void ValidateInputs();
+void UpdateSetupDisplay();
 
 /********************
  * Global variables *

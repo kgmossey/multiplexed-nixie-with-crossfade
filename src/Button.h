@@ -28,7 +28,7 @@ public:
   Button(void (*CallbackFunction)(), bool AllowRepeat);
   Button(void (*CallbackFunction)(), unsigned int *Repeat, unsigned int size);
   
-  ButtonStates get_current_state(ButtonStates current_state);
+  ButtonStates get_current_state();
   void handle_current_state(ButtonStates current_state);
   void setCallback(void (*CallbackFunction)());
   void setLongPressCallback(void (*CallbackFunction)(), unsigned int ticks);
@@ -48,6 +48,7 @@ private:
   unsigned int long_press_trigger;
   bool wake_up_override = false;
   bool repeat = false;
+  ButtonStates button_state;
 
   void (*Button_Click_Handler)();
   void (*Long_Click_Handler)();
