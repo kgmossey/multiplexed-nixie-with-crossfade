@@ -53,6 +53,7 @@ void SetTimerInterrupts();
 void SetTimerInterrupts();
 void ValidateInputs();
 void UpdateSetupDisplay();
+void CancelSettingsMode();
 
 /********************
  * Global variables *
@@ -82,6 +83,9 @@ byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04
 byte bcd_ones_only[10] = { 15, 143,  47, 175,  31, 159,  63, 191,  79, 207}; // -0 -1 -2 -3 -4 -5 -6 -7 -8 -9
 byte bcd_tens_only[10] = {240, 248, 242, 250, 241, 249, 243, 251, 244, 252}; // 0- 1- 2- 3- 4- 5- 6- 7- 8- 9-
 bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interrupt Complete
+
+const unsigned long TICKS_PER_MINUTE = 600000; // 60 * 10,000Hz
+const unsigned long TICKS_PER_SECOND = 10000;  // defined by IRQ2
 
 State LeftTubesOn (left, update_left);
 State TubesOff_L (none, turn_off_all_tubes);

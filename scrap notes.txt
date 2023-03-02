@@ -147,15 +147,18 @@ OCRA 24
 TIMSK2 2
 TIMSK1 2
 
-Current todo: 
-- Create a settings state machine, per above states
-- Turn off setup mode after 10 seconds of inactivity
-- Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
-- Cycle through minutes
-
-todo: 
+Todo: 
 - test debounce (double clicks?)
 - settings exit shortcut (instead of autosleep have it return to showing time)
 - run anti-burn code
-- fix year set
 - test load settings from memory
+- add "dirty" property to set time 
+- set sleep = 0 to be infinite on 
+- change 24 to sizeof(array) in: Button Advance (AdvanceButtonPressed, button_repeat_pattern, 24);
+
+Done:
+Updates-3Mar23
+- fix year set (20xx on display)
+- Turn off setup mode after 10 seconds of inactivity
+- Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
+

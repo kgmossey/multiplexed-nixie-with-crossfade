@@ -30,19 +30,20 @@ void setup() {
     clock.fillByHMS(20,13,00);      // H,M,S
     clock.fillDayOfWeek(TUE);
     clock.setTime();
+    clock.setRamAddress(0, BrightnessMed); // medium brightness default time
+    clock.setRamAddress(1, 0); clock.setRamAddress(2, 5); // 5 minute default off time
   } else {
     clock.getTime();
   }
   PowerState.setTrigger(GoToSleep);
-  PowerState.setMaxTick ( ((unsigned long)clock.getRamAddress(1)<<24) + 
-                          ((unsigned long)clock.getRamAddress(2)<<16) + 
-                          ((unsigned long)clock.getRamAddress(3)<<8) + 
-                           (unsigned long)clock.getRamAddress(4));
+  PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
+                           (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
   Brightness = clock.getRamAddress(0);
   if (Brightness<1) { Brightness = 1; }
   if (Brightness>8) { Brightness = 8; }
   // todo: get following from ram
-  Settings.setLongPressCallback(GoToSleep, 30000);
+  Settings.setLongPressCallback(GoToSleep, 3 * TICKS_PER_SECOND);
+  SettingsSM.setMaxTick(10 * TICKS_PER_SECOND);
   CrossfadeSM.setMaxTick (240);
   LeftTubesOn.setNext(TubesOff_L);
   TubesOff_L.setNext(CenterTubesOn);
@@ -115,6 +116,7 @@ ISR(TIMER2_COMPA_vect) {
   MultiplexSM.tick();
   CrossfadeSM.tick();
   PowerState.tick();
+  SettingsSM.tick();
       
   multiplexTick = MultiplexSM.getTick();
   xfadeTick = CrossfadeSM.getTick();
@@ -390,7 +392,8 @@ void hold_display(unsigned long microseconds) {
 
 void SettingsButtonPressed() {
   PowerState.resetTick();
-
+  SettingsSM.resetTick();
+        
   if (PowerState.isInState(Sleeping)) {
     PowerState.transitionTo(On);
     display.setup_mode = false;
@@ -405,6 +408,7 @@ void SettingsButtonPressed() {
     switch (SettingsSM.getCurrentStateId()) {
       case normaldisplay:
         SettingsSM.transitionTo(SetHours);
+        SettingsSM.setTrigger(CancelSettingsMode);
         break;
       case sethours:
         SettingsSM.transitionTo(SetMinutes);
@@ -435,12 +439,10 @@ void SettingsButtonPressed() {
         clock.setRamAddress(0, Brightness);
         break;
       case setsleep:
-        SettingsSM.transitionTo(NormalDisplay);
-        clock.setRamAddress(1, ((PowerState.getMaxTick()/10000) >> 24) & 0xFF);
-        clock.setRamAddress(2, ((PowerState.getMaxTick()/10000) >> 16) & 0xFF);
-        clock.setRamAddress(3, ((PowerState.getMaxTick()/10000) >> 8) & 0xFF);
-        clock.setRamAddress(4, (PowerState.getMaxTick()/10000) & 0xFF);        
-    } 
+        CancelSettingsMode();
+        clock.setRamAddress(1, ((PowerState.getMaxTick()/TICKS_PER_MINUTE) >> 8) & 0xFF);
+        clock.setRamAddress(2, (PowerState.getMaxTick()/TICKS_PER_MINUTE) & 0xFF);        
+} 
 
   }
   UpdateSetupDisplay();
@@ -477,8 +479,8 @@ void AdvanceButtonPressed() {
       Brightness++;
       break;
     case setsleep:
-      unsigned long sleep_minutes = PowerState.getMaxTick()/600000;
-      PowerState.setMaxTick(++sleep_minutes*600000);
+      //unsigned long sleep_minutes = PowerState.getMaxTick()/TICKS_PER_MINUTE;
+      PowerState.setMaxTick(PowerState.getMaxTick() + TICKS_PER_MINUTE);
   } 
 
   ValidateInputs();
@@ -516,8 +518,8 @@ void DecreaseButtonPressed() {
       Brightness--;
       break;
     case setsleep:
-      unsigned long sleep_minutes = PowerState.getMaxTick()/600000;
-      PowerState.setMaxTick(--sleep_minutes*600000);
+      //unsigned long sleep_minutes = PowerState.getMaxTick()/TICKS_PER_MINUTE;
+      PowerState.setMaxTick(PowerState.getMaxTick() - TICKS_PER_MINUTE);
   } 
 
   ValidateInputs();
@@ -596,8 +598,8 @@ void ValidateInputs() {
   if (Brightness == 9) { Brightness = 8; }
 
   // todo: set 0 = to permanently on
-  if (PowerState.getMaxTick() == 0) { PowerState.setMaxTick(60000); }
-  if (PowerState.getMaxTick() > 360000000) { PowerState.setMaxTick(360000000); }
+  if (PowerState.getMaxTick() <= 0) { PowerState.setMaxTick(TICKS_PER_MINUTE); }
+  if (PowerState.getMaxTick() > 600*TICKS_PER_MINUTE) { PowerState.setMaxTick(600 * TICKS_PER_MINUTE); }
 }
 
 void UpdateSetupDisplay() {
@@ -621,7 +623,12 @@ void UpdateSetupDisplay() {
       display.update (4, 0, Brightness, Brightness );
       break;
     case setsleep:
-      display.update (5, 0, PowerState.getMaxTick()/600000, Brightness );
-      // 60 seconds/minute, 10000 ticks/second
+      unsigned int temp = PowerState.getMaxTick()/TICKS_PER_MINUTE;
+      display.update (5, temp / 100, temp % 100, Brightness );
   }
+}
+
+void CancelSettingsMode() {
+  SettingsSM.transitionTo(NormalDisplay);
+  SettingsSM.setTrigger(NULL);      
 }
