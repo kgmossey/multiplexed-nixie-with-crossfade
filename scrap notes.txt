@@ -151,7 +151,6 @@ Todo:
 - test debounce (double clicks?)
 - settings exit shortcut (instead of autosleep have it return to showing time)
 - run anti-burn code
-- test load settings from memory
 - add "dirty" property to set time 
 - set sleep = 0 to be infinite on 
 - change 24 to sizeof(array) in: Button Advance (AdvanceButtonPressed, button_repeat_pattern, 24);
@@ -162,3 +161,5 @@ Updates-3Mar23
 - Turn off setup mode after 10 seconds of inactivity
 - Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
 
+Updates-3Mar23b
+- Added reset to settings state machine tick when pressing advance or decrease buttons 

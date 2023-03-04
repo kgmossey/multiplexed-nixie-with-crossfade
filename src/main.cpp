@@ -442,7 +442,7 @@ void SettingsButtonPressed() {
         CancelSettingsMode();
         clock.setRamAddress(1, ((PowerState.getMaxTick()/TICKS_PER_MINUTE) >> 8) & 0xFF);
         clock.setRamAddress(2, (PowerState.getMaxTick()/TICKS_PER_MINUTE) & 0xFF);        
-} 
+    } 
 
   }
   UpdateSetupDisplay();
@@ -451,6 +451,7 @@ void SettingsButtonPressed() {
 
 void AdvanceButtonPressed() {
   PowerState.resetTick();
+  SettingsSM.resetTick();
 
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
@@ -490,6 +491,7 @@ void AdvanceButtonPressed() {
 
 void DecreaseButtonPressed() {
   PowerState.resetTick();
+  SettingsSM.resetTick();
 
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
