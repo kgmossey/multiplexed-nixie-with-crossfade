@@ -65,8 +65,8 @@ unsigned int button_repeat_pattern[24] = { 15000, 8000, 8000, 8000, 8000, 8000,
                                            1000 };
 //unsigned int test_pattern [3] = { 1000, 500, 250};
 Button Settings (SettingsButtonPressed);
-Button Advance (AdvanceButtonPressed, button_repeat_pattern, 24);
-Button Decrease (DecreaseButtonPressed, button_repeat_pattern, 24);
+Button Advance (AdvanceButtonPressed, button_repeat_pattern, sizeof(button_repeat_pattern)/sizeof(button_repeat_pattern[0]));
+Button Decrease (DecreaseButtonPressed, button_repeat_pattern, sizeof(button_repeat_pattern)/sizeof(button_repeat_pattern[0]));
 // Create an index of binary coded decimal values to easily reference two digit numbers
 byte bcd[100] = { 0, 128, 32, 160, 16, 144, 48, 176, 64, 192,  // 00 01 02 03 04 05 06 07 08 09
                   8, 136, 40, 168, 24, 152, 56, 184, 72, 200,  // 10 11 12 13 14 15 16 17 18 19

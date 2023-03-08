@@ -166,25 +166,25 @@ void update_tube_pair (byte value, byte tube_pair){
 }
 
 void update_left() {
-#ifdef DEBUG_MODE
-  switch (SettingsSM.getCurrentStateId()) {
-    case setminutes:
-      update_center();
-      return;
-      break;
-    case normaldisplay:
-    case setseconds:
-    case setyear:
-    case setmonth:
-    case setday:
-    case setbrightness:
-    case setsleep:
-      update_right();
-      return;
-    case sethours:
-      ; // do nothing
-  }
-#endif
+  #ifdef DEBUG_MODE
+    switch (SettingsSM.getCurrentStateId()) {
+      case setminutes:
+        update_center();
+        return;
+        break;
+      case normaldisplay:
+      case setseconds:
+      case setyear:
+      case setmonth:
+      case setday:
+      case setbrightness:
+      case setsleep:
+        update_right();
+        return;
+      case sethours:
+        ; // do nothing
+    }
+  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
@@ -211,24 +211,24 @@ void update_left() {
 }
 
 void update_center() {
-#ifdef DEBUG_MODE
-  switch (SettingsSM.getCurrentStateId()) {
-    case sethours:
-      update_left();
-      return;  
-    case normaldisplay:
-    case setseconds:
-    case setyear:
-    case setmonth:
-    case setday:
-    case setbrightness:
-    case setsleep:
-      update_right();
-      return;
-    case setminutes:
-      ; // do nothing
-  }    
-#endif
+  #ifdef DEBUG_MODE
+    switch (SettingsSM.getCurrentStateId()) {
+      case sethours:
+        update_left();
+        return;  
+      case normaldisplay:
+      case setseconds:
+      case setyear:
+      case setmonth:
+      case setday:
+      case setbrightness:
+      case setsleep:
+        update_right();
+        return;
+      case setminutes:
+        ; // do nothing
+    }    
+  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
@@ -249,24 +249,24 @@ void update_center() {
 }
 
 void update_right() {
-#ifdef DEBUG_MODE
-  switch (SettingsSM.getCurrentStateId()) {
-    case sethours:
-      update_left();
-      return;  
-    case setminutes:
-      update_center();
-      return;
-    case normaldisplay:
-    case setseconds:
-    case setyear:
-    case setmonth:
-    case setday:
-    case setbrightness:
-    case setsleep:
-      ; // do nothing
-  }    
-#endif
+  #ifdef DEBUG_MODE
+    switch (SettingsSM.getCurrentStateId()) {
+      case sethours:
+        update_left();
+        return;  
+      case setminutes:
+        update_center();
+        return;
+      case normaldisplay:
+      case setseconds:
+      case setyear:
+      case setmonth:
+      case setday:
+      case setbrightness:
+      case setsleep:
+        ; // do nothing
+    }    
+  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentRight()
@@ -530,6 +530,7 @@ void DecreaseButtonPressed() {
 
 void GoToSleep() {
   display.setup_mode = false;
+  cycle_digits();
   PowerState.transitionTo(Sleeping);
 }
 
@@ -622,7 +623,7 @@ void UpdateSetupDisplay() {
       display.update (3, 0, clock.dayOfMonth, Brightness );
       break;
     case setbrightness:
-      display.update (4, 0, Brightness, Brightness );
+      display.update (4, 0, 9 - Brightness, Brightness );
       break;
     case setsleep:
       unsigned int temp = PowerState.getMaxTick()/TICKS_PER_MINUTE;

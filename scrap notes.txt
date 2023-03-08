@@ -118,9 +118,6 @@ Pressing advance/decrease buttons should advance setting by:
   10-13 10 seconds 
   14-59 21.5 seconds 
 
-Ceate a callback function to trigger a button press.  Use the update function?
-
-
 Timer settings pre initialization
 TCCR1A 1
 TCCR1B 3
@@ -149,11 +146,9 @@ TIMSK1 2
 
 Todo: 
 - test debounce (double clicks?)
-- settings exit shortcut (instead of autosleep have it return to showing time)
 - run anti-burn code
 - add "dirty" property to set time 
 - set sleep = 0 to be infinite on 
-- change 24 to sizeof(array) in: Button Advance (AdvanceButtonPressed, button_repeat_pattern, 24);
 
 Done:
 Updates-3Mar23
@@ -163,3 +158,8 @@ Updates-3Mar23
 
 Updates-3Mar23b
 - Added reset to settings state machine tick when pressing advance or decrease buttons 
+
+Updates-8Mar23
+- Changed "Brightness" setting on display to show 1-8 for dim-bright (previously was 8 to 1 matching code)
+- Added anti-cathode poisoning routine to sleep function
+- changed hardcoded 24 to sizeof(array) in: Button Advance and Decrease definitions in main.h
