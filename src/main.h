@@ -17,10 +17,14 @@
 #define center          4             // pin 2 mask, bit 2
 #define right           16            // pin 4 mask, bit 4
 #define none            0             // no pins
-#define SleepButton     (PINB & 0x01) // Pin 14 (D8)
+//#define SettingsButton     (PINB & 0x01) // Pin 14 (D8)
 #define SettingsButton  (PIND & 0x80) // Pin 13 (D7)
 #define AdvanceButton   (PIND & 0x40) // Pin 12 (D6)
 #define DecreaseButton  (PIND & 0x20) // Pin 11 (D5)
+//#define Future1       (PIND & 0x20) // Pin 11 (D5)
+//#define Future2       (PIND & 0x20) // Pin  3 (D1)
+//#define Future3       (PIND & 0x20) // Pin  2 (D0)
+//#define Future4       (PIND & 0x20) // Pin 26 (A3)
 #define SettingsMask    2
 #define PlusMask        3
 #define MinusMask       4
@@ -54,6 +58,8 @@ void SetTimerInterrupts();
 void ValidateInputs();
 void UpdateSetupDisplay();
 void CancelSettingsMode();
+void CathodeProtectionRoutine();
+void CathodeProtectionTrigger();
 
 /********************
  * Global variables *
@@ -87,6 +93,15 @@ bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interr
 const unsigned long TICKS_PER_MINUTE = 600000; // 60 * 10,000Hz
 const unsigned long TICKS_PER_SECOND = 10000;  // defined by IRQ2
 
+// define memory addresses
+const byte addrBrightness = 0;
+const byte addrSleepHi = 1;
+const byte addrSleepLow = 2;
+const byte addrAPtubes = 3;
+
+// To keep track of whether a setting has been changed and needs to be saved
+bool Dirty = false;
+
 State LeftTubesOn (left, update_left);
 State TubesOff_L (none, turn_off_all_tubes);
 State CenterTubesOn (center, update_center);
@@ -97,11 +112,13 @@ FSM MultiplexSM = FSM(TubesOff_L);
 
 enum PowerStates {
   psSleeping,
-  psOn 
+  psOn,
+  psCathodeProtection // this is to be used for running a once daily anti-poisoning routine 
 };
 
 State Sleeping(psSleeping); 
 State On(psOn); 
+State CathodeProtection(psCathodeProtection, CathodeProtectionRoutine);
 FSM PowerState(On);
 
 enum CrossfadeStates {

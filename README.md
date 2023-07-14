@@ -11,4 +11,30 @@ It uses Timer1 and Timer2 interrupts, and requires the external DS1307 library (
 
 Crossfading digits is done by slowly increasing the on time of the new digit and slowly decreasing the on time of the old digit until the new digit is completely on.  Each tube pair is on for 900us (microseconds) and then off for 2100us, in 100us increments.  So the on time goes in the order of 0, 100, 200, ... 800, 900 us, over the course of several cycles.  All the tubes are off for 100us every cycle to prevent bleeding of the next pairs values into the tube that has just turned off.  The nixie tube is the slowest piece of equipment in the whole clock.
 
-To maximize tube life, the clock will be designed to automatically sleep, as of this writing I haven't implemented this code yet.
+To maximize tube life, the clock is designed to automatically sleep after a user configurable time which is set in minutes.  The clock can also be put to sleep by holding the settings button down for 3 seconds. An anti-poisoning routine (to protect against cathode poisoning) cycles the digits every time the clock goes to sleep.
+
+Updates:
+~~~~~~~~
+Updates-26Jun23
+- Added routines to prevent cathode poisoning
+- Defined names for memory addresses
+- got rid of cycling digits when going to sleep 
+- bug fix: center tubes did not display values for sleep time in settings
+- StateMachine: Added != operator override 
+- StateMachine: Added trigger flag 
+- Display: Added update function to show max brightness 
+- Added Dirty flag for time 
+
+Updates-8Mar23
+- Changed "Brightness" setting on display to show 1-8 for dim-bright (previously was 8 to 1 matching code)
+- Added anti-cathode poisoning routine to sleep function
+- changed hardcoded 24 to sizeof(array) in: Button Advance and Decrease definitions in main.h
+
+Updates-3Mar23b
+- Added reset to settings state machine tick when pressing advance or decrease buttons 
+
+Updates-3Mar23
+- fix year set (20xx on display)
+- Turn off setup mode after 10 seconds of inactivity
+- Change PowerState.setMaxTick (3000000); line to read from memory and set as settings
+

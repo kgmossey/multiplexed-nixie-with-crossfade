@@ -76,6 +76,11 @@ Display::Display(byte xfadeSteps)
   maxXfade = xfadeSteps;
 }
 
+void Display::update(byte Left, byte Center, byte Right)
+{
+  update(Left, Center, Right, 1);
+}
+
 void Display::update(byte Left, byte Center, byte Right, byte brightness)
 {
   previous = current;

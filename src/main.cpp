@@ -22,22 +22,32 @@ void setup() {
   turn_off_tubes(left + center + right);
   #ifdef DEBUG_MODE
     Serial.begin(38400);
+    Serial.println ("Debug mode enabled!");
   #endif
   clock.begin();
-    
+
+  #ifndef DEBUG_MODE  
   if (!clock.isStarted()) {
+  #endif
     clock.fillByYMD(2022,8,19);     // Y,M,D
-    clock.fillByHMS(20,13,00);      // H,M,S
+    clock.fillByHMS(11,59,30);      // H,M,S
     clock.fillDayOfWeek(TUE);
     clock.setTime();
-    clock.setRamAddress(0, BrightnessMed); // medium brightness default time
-    clock.setRamAddress(1, 0); clock.setRamAddress(2, 5); // 5 minute default off time
-  } else {
+    clock.setRamAddress(addrBrightness, BrightnessMed); // medium brightness default time
+    clock.setRamAddress(addrSleepHi, 0); clock.setRamAddress(addrSleepLow, 5); // 5 minute default off time
+  #ifndef DEBUG_MODE  
+    } else {
     clock.getTime();
   }
+  #endif
+  PowerState.update();
   PowerState.setTrigger(GoToSleep);
+#ifdef DEBUG_MODE
+  PowerState.setMaxTick(5*TICKS_PER_SECOND);
+#else
   PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
                            (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
+#endif
   Brightness = clock.getRamAddress(0);
   if (Brightness<1) { Brightness = 1; }
   if (Brightness>8) { Brightness = 8; }
@@ -62,15 +72,28 @@ void setup() {
 }
 
 void loop() {
-
+    
   if (TC1IRQ_complete) { // 2Hz interrrupt
     // This getTime() call takes slight over 1ms, needs to be handled outside 
     // interrupt because of the way the wire library works.
     if (SettingsSM.getCurrentState() == NormalDisplay) {
       clock.getTime();
-      if (DISPLAY_DATE &&
-          display_date_step > DISPLAY_DATE_START &&
-          display_date_step <= DISPLAY_DATE_END) {
+#ifdef DEBUG_MODE
+        Serial.print(clock.hour); Serial.print(clock.minute);Serial.println(clock.second);
+#endif
+      if (PowerState.getCurrentState() == Sleeping && clock.hour >= 12 &&
+          clock.hour <= 16 && clock.minute == 0 && clock.second == 0) {
+#ifdef DEBUG_MODE
+        Serial.print(PowerState.getCurrentStateId()); Serial.print(" "); 
+#endif        
+        PowerState.transitionTo(CathodeProtection);
+#ifdef DEBUG_MODE
+        Serial.println(PowerState.getCurrentStateId()); 
+#endif        
+        PowerState.update();
+      } else if (DISPLAY_DATE &&
+                 display_date_step > DISPLAY_DATE_START &&
+                 display_date_step <= DISPLAY_DATE_END) {
         display.update (clock.year, clock.month, clock.dayOfMonth, Brightness);
       } else {
         display.update (clock.hour, clock.minute, clock.second, Brightness);
@@ -84,7 +107,7 @@ void loop() {
     Settings.handle_current_state((SettingsButton == Pressed) ? down : up);
     Advance.handle_current_state((AdvanceButton == Pressed) ? down : up);
     Decrease.handle_current_state((DecreaseButton == Pressed) ? down : up);
-  
+    
     TC2IRQ_complete = false;
   }
 
@@ -97,10 +120,10 @@ ISR(TIMER1_COMPA_vect) {
   display_date_step++;
   if (display_date_step == DISPLAY_DATE_END) { display_date_step = 0; }
 
-  if (SettingsSM.getCurrentState() == NormalDisplay) {
-    display.flash = false;
-  } else {
+  if (SettingsSM.getCurrentState() != NormalDisplay) {
     display.flash = !display.flash;
+  } else {
+    display.flash = false;
   }
   TC1IRQ_complete = true;
 }
@@ -131,7 +154,12 @@ ISR(TIMER2_COMPA_vect) {
   } else {
     CrossfadeSM.transitionTo(Current);
   }
-  MultiplexSM.update();
+
+  // The crossfade code above will run regardless of whether or not the anti poisoning routine is active
+  // but we will override the regular display during the cathode cycling
+  if (PowerState.getCurrentState() != CathodeProtection) {
+    MultiplexSM.update();
+  }   
 
   // When the crossfade tick is 0, increment the crossfade pass counter
   if (xfadeTick == 0) {
@@ -152,8 +180,11 @@ void turn_off_tubes(byte tube_mask) {
 void update_tube_pair (byte value, byte tube_pair){
 
   // Turning off the anode even though it should already be off to prevent
-  // cathode switching in the case of cross-fading
-  turn_off_tubes(tube_pair);
+  // cathode switching in the case of cross-fading. Leave it on full power
+  // during the cathode anti-poisoning routine
+  if (PowerState.getCurrentState()!=CathodeProtection) {
+    turn_off_tubes(tube_pair);
+  }
   PORTB = (bcd[value] << 1) & B00111110;
   PORTC = (bcd[value] >> 5) & B00000111;
   /* moving this code to each tube pair to account for settings state
@@ -166,25 +197,6 @@ void update_tube_pair (byte value, byte tube_pair){
 }
 
 void update_left() {
-  #ifdef DEBUG_MODE
-    switch (SettingsSM.getCurrentStateId()) {
-      case setminutes:
-        update_center();
-        return;
-        break;
-      case normaldisplay:
-      case setseconds:
-      case setyear:
-      case setmonth:
-      case setday:
-      case setbrightness:
-      case setsleep:
-        update_right();
-        return;
-      case sethours:
-        ; // do nothing
-    }
-  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentLeft()
@@ -206,29 +218,9 @@ void update_left() {
         PORTD |= left; 
       }
   }
-
-
 }
 
 void update_center() {
-  #ifdef DEBUG_MODE
-    switch (SettingsSM.getCurrentStateId()) {
-      case sethours:
-        update_left();
-        return;  
-      case normaldisplay:
-      case setseconds:
-      case setyear:
-      case setmonth:
-      case setday:
-      case setbrightness:
-      case setsleep:
-        update_right();
-        return;
-      case setminutes:
-        ; // do nothing
-    }    
-  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentCenter()
@@ -236,37 +228,25 @@ void update_center() {
   if (PowerState.isInState(Sleeping)) { return; }
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
+    case setsleep:
     case sethours:
     case setminutes:
     case setseconds:
     case setyear:
-      if ((SettingsSM.getCurrentState() == SetMinutes || SettingsSM.getCurrentState() == SetYear) && 
-           Advance.get_current_state() == up && Decrease.get_current_state() == up && display.flash) {
-          return;
-        } 
+      if (display.flash) {
+        if ((SettingsSM.getCurrentState() == SetSleep || 
+             SettingsSM.getCurrentState() == SetMinutes || 
+             SettingsSM.getCurrentState() == SetYear) && 
+             Advance.get_current_state() == up && 
+             Decrease.get_current_state() == up) {
+            return;
+        }
+      } 
       if (PowerState.isInState(On)) { PORTD |= center; }
   }
 }
 
 void update_right() {
-  #ifdef DEBUG_MODE
-    switch (SettingsSM.getCurrentStateId()) {
-      case sethours:
-        update_left();
-        return;  
-      case setminutes:
-        update_center();
-        return;
-      case normaldisplay:
-      case setseconds:
-      case setyear:
-      case setmonth:
-      case setday:
-      case setbrightness:
-      case setsleep:
-        ; // do nothing
-    }    
-  #endif
   // Check cross-fade
   update_tube_pair(CrossfadeSM.isInState(Current)
                    ? display.getCurrentRight()
@@ -394,17 +374,17 @@ void SettingsButtonPressed() {
   PowerState.resetTick();
   SettingsSM.resetTick();
         
-  if (PowerState.isInState(Sleeping)) {
+  if (PowerState.isInState(Sleeping)
+      or PowerState.isInState(CathodeProtection)) {
     PowerState.transitionTo(On);
+    PowerState.setTrigger(GoToSleep);
     display.setup_mode = false;
     SettingsSM.transitionTo(NormalDisplay);
     Settings.setWakeUpOverride();
     return;
-  } 
-
-  else 
-
-  {
+  
+  } else {
+  
     switch (SettingsSM.getCurrentStateId()) {
       case normaldisplay:
         SettingsSM.transitionTo(SetHours);
@@ -412,46 +392,50 @@ void SettingsButtonPressed() {
         break;
       case sethours:
         SettingsSM.transitionTo(SetMinutes);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setminutes:
         SettingsSM.transitionTo(SetSeconds);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setseconds:
         SettingsSM.transitionTo(SetYear);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setyear:
         SettingsSM.transitionTo(SetMonth);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setmonth:
         SettingsSM.transitionTo(SetDay);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setday:
         SettingsSM.transitionTo(SetBrightness);
-        clock.setTime();
+        if (Dirty) { clock.setTime(); }
         break;
       case setbrightness:
         SettingsSM.transitionTo(SetSleep);
-        clock.setRamAddress(0, Brightness);
+        clock.setRamAddress(addrBrightness, Brightness);
         break;
       case setsleep:
         CancelSettingsMode();
-        clock.setRamAddress(1, ((PowerState.getMaxTick()/TICKS_PER_MINUTE) >> 8) & 0xFF);
-        clock.setRamAddress(2, (PowerState.getMaxTick()/TICKS_PER_MINUTE) & 0xFF);        
+        clock.setRamAddress(addrSleepHi, ((PowerState.getMaxTick()/TICKS_PER_MINUTE) >> 8) & 0xFF);
+        clock.setRamAddress(addrSleepLow, (PowerState.getMaxTick()/TICKS_PER_MINUTE) & 0xFF);        
     } 
 
   }
   UpdateSetupDisplay();
-  
+  Dirty = false;
 }
 
 void AdvanceButtonPressed() {
   PowerState.resetTick();
   SettingsSM.resetTick();
+
+  if ( SettingsSM.getCurrentState() != NormalDisplay ) {
+          Dirty = true;
+  }
 
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
@@ -493,6 +477,10 @@ void DecreaseButtonPressed() {
   PowerState.resetTick();
   SettingsSM.resetTick();
 
+  if ( SettingsSM.getCurrentState() != NormalDisplay ) {
+          Dirty = true;
+  }
+
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
       // do nothing
@@ -530,7 +518,7 @@ void DecreaseButtonPressed() {
 
 void GoToSleep() {
   display.setup_mode = false;
-  cycle_digits();
+  CancelSettingsMode();
   PowerState.transitionTo(Sleeping);
 }
 
@@ -634,4 +622,53 @@ void UpdateSetupDisplay() {
 void CancelSettingsMode() {
   SettingsSM.transitionTo(NormalDisplay);
   SettingsSM.setTrigger(NULL);      
+  SettingsSM.update();
+}
+
+void CathodeProtectionRoutine() {
+  byte x;
+  byte TubePair = clock.getRamAddress(addrAPtubes);
+  if (TubePair > 2) { TubePair = 0; }
+  CancelSettingsMode();
+  PowerState.setMaxTick(6*TICKS_PER_SECOND);
+  PowerState.setTrigger(CathodeProtectionTrigger);
+
+  turn_off_all_tubes();
+  for (int i=9;i>=0;i--) // needs to be a signed data type 
+  {
+    PowerState.resetTick();
+    x = i*10 + i;
+    #ifdef DEBUG_MODE
+      Serial.println(x);
+    #endif
+    switch (TubePair) {
+      case 0:
+        update_tube_pair(x, left);
+        PORTD |= left; break;
+      case 1: 
+        update_tube_pair(x, center);
+        PORTD |= center; break;
+      case 2:
+        update_tube_pair(x, right);
+        PORTD |= right;
+    }
+    // hold the display until state machine triggers
+    while (!PowerState.wasTriggered()) {
+      if (PowerState.getCurrentState() == On) {
+        // Someone pressed the settings button, kick out of this
+        return;
+      }
+    }
+  }
+
+  PowerState.transitionTo(Sleeping);
+  PowerState.update();
+  PowerState.setTrigger(NULL);
+  PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
+                           (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
+  clock.setRamAddress(addrAPtubes, ++TubePair);
+}
+
+void CathodeProtectionTrigger() {
+  return;
 }

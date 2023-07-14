@@ -73,6 +73,9 @@ bool State::operator==(State& rhs)  {
 	return id == rhs.getID();
 }
 
+bool State::operator!=(State& rhs)  {
+	return id != rhs.getID();
+}
 //END FINITE STATE
 
 
@@ -119,11 +122,10 @@ FiniteStateMachine& FiniteStateMachine::transitionTo(State& state){
 void FiniteStateMachine::tick() {
 	index++;
 	if (index==maxTick) {
-		if (!Trigger) {
-			index = 0;
-		} else {
+		index = 0;
+		if (Trigger) {
+			Triggered = true;
 			Trigger();
-			// todo: decide if index should be reset to 0 here.
 		}
 	}
 }
@@ -180,6 +182,8 @@ boolean FiniteStateMachine::isInState( State &state ) const {
 
 // The trigger function is called when the index reaches max tick, if set
 void FiniteStateMachine::setTrigger(void (*TriggerFunction)()){
+	index = 0;
+	Triggered = false;
 	Trigger = TriggerFunction;
 }
 
@@ -187,4 +191,14 @@ void FiniteStateMachine::setTrigger(void (*TriggerFunction)()){
 unsigned long FiniteStateMachine::timeInCurrentState() {
 	return millis() - stateChangeTime;
 }
+
+bool FiniteStateMachine::wasTriggered(){
+	if (Triggered) {
+		Triggered = false;
+		return true;
+	} else {
+		return false;
+	}
+}
+
 //END FINITE STATE MACHINE

@@ -54,6 +54,7 @@ class State {
 		State& getNext();
 		void setNext(State& next);
 		virtual bool operator==(State& rhs) ;
+		virtual bool operator!=(State& rhs) ;
 
 	private:
 		byte id;
@@ -81,8 +82,9 @@ class FiniteStateMachine {
 		State& getPreviousState();
 		byte getPreviousStateID();
 		void transitionNext();
-		boolean isInState( State &state ) const;
+		bool isInState( State &state ) const;
 		void setTrigger(void (*TriggerFunction)());
+		bool wasTriggered();
 
 		unsigned long timeInCurrentState();
 
@@ -91,7 +93,8 @@ class FiniteStateMachine {
 		State* 	previousState;
 		State* 	currentState;
 		State* 	nextState;
-		void (*Trigger)();
+		void    (*Trigger)();
+		bool    Triggered = false;
 		unsigned long stateChangeTime;
 		unsigned long index = 0;
 		unsigned long maxTick = 10;
