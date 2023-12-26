@@ -60,6 +60,7 @@ void UpdateSetupDisplay();
 void CancelSettingsMode();
 void CathodeProtectionRoutine();
 void CathodeProtectionTrigger();
+void WakeupRoutine();
 
 /********************
  * Global variables *
@@ -92,6 +93,7 @@ bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interr
 
 const unsigned long TICKS_PER_MINUTE = 600000; // 60 * 10,000Hz
 const unsigned long TICKS_PER_SECOND = 10000;  // defined by IRQ2
+const unsigned long WAKEUP_TICKS = 50;
 
 // define memory addresses
 const byte addrBrightness = 0;
@@ -112,11 +114,13 @@ FSM MultiplexSM = FSM(TubesOff_L);
 
 enum PowerStates {
   psSleeping,
+  psWakeUp,
   psOn,
   psCathodeProtection // this is to be used for running a once daily anti-poisoning routine 
 };
 
 State Sleeping(psSleeping); 
+State WakeUp(psWakeUp);
 State On(psOn); 
 State CathodeProtection(psCathodeProtection, CathodeProtectionRoutine);
 FSM PowerState(On);

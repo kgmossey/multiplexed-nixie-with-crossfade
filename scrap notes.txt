@@ -128,9 +128,6 @@ Todo:
 - Add CAD files to github
 - update button bracket
 - Update settings to allow for manual config of hours that cathode protection routine runs (currently 12-16)
-- Continue to update seconds while setting time.
-- run anti-burn code
-- add "dirty" property to set time 
 
 Done:
 Updates-3Mar23
@@ -155,3 +152,6 @@ Updates-26Jun23
 - StateMachine: Added trigger flag 
 - Display: Added update function to show max brightness 
 - Added Dirty flag for time 
+
+Updates-23Dec23
+- Fix wake up bug where tubes don't all light up at once

@@ -43,7 +43,7 @@ void setup() {
   PowerState.update();
   PowerState.setTrigger(GoToSleep);
 #ifdef DEBUG_MODE
-  PowerState.setMaxTick(5*TICKS_PER_SECOND);
+  PowerState.setMaxTick(10*TICKS_PER_SECOND);
 #else
   PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
                            (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
@@ -79,17 +79,13 @@ void loop() {
     if (SettingsSM.getCurrentState() == NormalDisplay) {
       clock.getTime();
 #ifdef DEBUG_MODE
-        Serial.print(clock.hour); Serial.print(clock.minute);Serial.println(clock.second);
+        Serial.print(clock.hour); Serial.print(":");
+        Serial.print(clock.minute); Serial.print(":");
+        Serial.println(clock.second);
 #endif
       if (PowerState.getCurrentState() == Sleeping && clock.hour >= 12 &&
           clock.hour <= 16 && clock.minute == 0 && clock.second == 0) {
-#ifdef DEBUG_MODE
-        Serial.print(PowerState.getCurrentStateId()); Serial.print(" "); 
-#endif        
         PowerState.transitionTo(CathodeProtection);
-#ifdef DEBUG_MODE
-        Serial.println(PowerState.getCurrentStateId()); 
-#endif        
         PowerState.update();
       } else if (DISPLAY_DATE &&
                  display_date_step > DISPLAY_DATE_START &&
@@ -156,8 +152,8 @@ ISR(TIMER2_COMPA_vect) {
   }
 
   // The crossfade code above will run regardless of whether or not the anti poisoning routine is active
-  // but we will override the regular display during the cathode cycling
-  if (PowerState.getCurrentState() != CathodeProtection) {
+  // but we will override the regular display during the cathode cycling and WakeUp
+  if (PowerState.getCurrentState() != CathodeProtection && PowerState.getCurrentState() != WakeUp) {
     MultiplexSM.update();
   }   
 
@@ -181,8 +177,8 @@ void update_tube_pair (byte value, byte tube_pair){
 
   // Turning off the anode even though it should already be off to prevent
   // cathode switching in the case of cross-fading. Leave it on full power
-  // during the cathode anti-poisoning routine
-  if (PowerState.getCurrentState()!=CathodeProtection) {
+  // during the cathode anti-poisoning routine and wake up surge
+  if (PowerState.getCurrentState() != CathodeProtection && PowerState.getCurrentState() != WakeUp) {
     turn_off_tubes(tube_pair);
   }
   PORTB = (bcd[value] << 1) & B00111110;
@@ -374,15 +370,16 @@ void SettingsButtonPressed() {
   PowerState.resetTick();
   SettingsSM.resetTick();
         
-  if (PowerState.isInState(Sleeping)
-      or PowerState.isInState(CathodeProtection)) {
-    PowerState.transitionTo(On);
-    PowerState.setTrigger(GoToSleep);
+  if (PowerState.isInState(Sleeping) or PowerState.isInState(CathodeProtection)) {
+    
+    PowerState.transitionTo(WakeUp);
+    PowerState.setMaxTick(WAKEUP_TICKS); 
+    PowerState.setTrigger(WakeupRoutine);
+    WakeupRoutine();
     display.setup_mode = false;
     SettingsSM.transitionTo(NormalDisplay);
-    Settings.setWakeUpOverride();
     return;
-  
+
   } else {
   
     switch (SettingsSM.getCurrentStateId()) {
@@ -638,9 +635,6 @@ void CathodeProtectionRoutine() {
   {
     PowerState.resetTick();
     x = i*10 + i;
-    #ifdef DEBUG_MODE
-      Serial.println(x);
-    #endif
     switch (TubePair) {
       case 0:
         update_tube_pair(x, left);
@@ -671,4 +665,40 @@ void CathodeProtectionRoutine() {
 
 void CathodeProtectionTrigger() {
   return;
+}
+
+void WakeupRoutine() {
+
+  static byte NextTubePair = left;
+  turn_off_all_tubes();
+
+  switch (NextTubePair) {
+    case left: 
+      update_tube_pair(clock.hour, left);
+      PORTD |= left;
+      NextTubePair = center;
+      break;
+    case center: 
+      update_tube_pair(clock.hour, center);
+      PORTD |= center;
+      NextTubePair = right;
+      break;
+    case right: 
+      update_tube_pair(clock.hour, right);
+      PORTD |= right;
+      NextTubePair = none;
+      break;
+    case none:
+      PowerState.resetTick();
+      #ifdef DEBUG_MODE
+        PowerState.setMaxTick(10*TICKS_PER_SECOND);
+      #else
+        PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
+                                (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
+      #endif
+      PowerState.transitionTo(On);
+      PowerState.setTrigger(GoToSleep);
+      Settings.setWakeUpOverride();
+      NextTubePair = left;
+  }
 }
