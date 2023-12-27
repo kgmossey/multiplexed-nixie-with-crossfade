@@ -106,7 +106,6 @@ Pressing Settings button, once debounce is completed, should not fire anything e
 Settings should return to time display after no input for 10 seconds.
 If in settings mode, double clicking settings should return to previous setting.  Double click is two presses of x1-x2 duration separated by y1-y2 ms.  
 
-/* todo: research double click time? */ 
 Pressing advance/decrease buttons should advance setting by:
   - 1/800ms for the first 5 seconds
   - 1/400ms for next 3 seconds
@@ -119,7 +118,6 @@ Pressing advance/decrease buttons should advance setting by:
   14-59 21.5 seconds 
 
 Todo: 
-- test debounce (double clicks? signal analyser?)
 - set sleep = 0 to be infinite on 
 - refactor code
   - make single include file of all global constants (Brightness settings for example)
@@ -155,3 +153,7 @@ Updates-26Jun23
 
 Updates-23Dec23
 - Fix wake up bug where tubes don't all light up at once
+
+Updates-27Dec23
+- Update debounce delay from 5ms to 50ms which is similar to keyboard debounce values
+- Fixed update of setMaxTick in powerstate - was trying to read via SPI during IRQ 

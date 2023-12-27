@@ -42,12 +42,9 @@ void setup() {
   #endif
   PowerState.update();
   PowerState.setTrigger(GoToSleep);
-#ifdef DEBUG_MODE
-  PowerState.setMaxTick(10*TICKS_PER_SECOND);
-#else
-  PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
-                           (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
-#endif
+  SLEEP_MAX_TICK = (((unsigned long)clock.getRamAddress(1)<<8) + 
+                     (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE;
+  PowerState.setMaxTick(SLEEP_MAX_TICK);
   Brightness = clock.getRamAddress(0);
   if (Brightness<1) { Brightness = 1; }
   if (Brightness>8) { Brightness = 8; }
@@ -690,12 +687,7 @@ void WakeupRoutine() {
       break;
     case none:
       PowerState.resetTick();
-      #ifdef DEBUG_MODE
-        PowerState.setMaxTick(10*TICKS_PER_SECOND);
-      #else
-        PowerState.setMaxTick ((((unsigned long)clock.getRamAddress(1)<<8) + 
-                                (unsigned long)clock.getRamAddress(2)) * TICKS_PER_MINUTE);
-      #endif
+      PowerState.setMaxTick(SLEEP_MAX_TICK);
       PowerState.transitionTo(On);
       PowerState.setTrigger(GoToSleep);
       Settings.setWakeUpOverride();

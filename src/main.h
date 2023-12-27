@@ -94,6 +94,7 @@ bool TC1IRQ_complete = false, TC2IRQ_complete = false; // Timer/Counter X Interr
 const unsigned long TICKS_PER_MINUTE = 600000; // 60 * 10,000Hz
 const unsigned long TICKS_PER_SECOND = 10000;  // defined by IRQ2
 const unsigned long WAKEUP_TICKS = 50;
+unsigned long SLEEP_MAX_TICK = 0;
 
 // define memory addresses
 const byte addrBrightness = 0;

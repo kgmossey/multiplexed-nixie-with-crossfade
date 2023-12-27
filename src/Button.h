@@ -38,7 +38,7 @@ public:
 
 private:
   unsigned long debounce_counter = 0;
-  unsigned long debounce_trigger = 50;
+  unsigned long debounce_trigger = 500;
   unsigned int default_repeat_trigger[1] = { 1000 };
   unsigned int repeat_counter = 0;  // number of ticks passed since either debounce or previous 
                                     // button press
