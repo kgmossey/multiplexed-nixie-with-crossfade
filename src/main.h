@@ -9,7 +9,7 @@
 #include <Wire.h>
 #include <Button.h>
 #include "DS1307.h"
-#include "StateMachine.h"
+#include "FiniteStateMachine.h"
 #include "display.h"
 
 // define masks

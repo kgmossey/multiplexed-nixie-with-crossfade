@@ -1,3 +1,6 @@
 [submodule "lib/RTC_DS1307"]
 	path = lib/RTC_DS1307
 	url = https://github.com/Seeed-Studio/RTC_DS1307.git
+[submodule "lib/FiniteStateMachine"]
+	path = lib/FiniteStateMachine
+	url = https://github.com/kgmossey/FiniteStateMachine.git
