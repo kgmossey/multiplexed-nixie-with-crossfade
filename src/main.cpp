@@ -204,6 +204,7 @@ void update_left() {
     case setday:
     case setbrightness:
     case setsleep:
+    case setwake:
       PORTD |= left; 
       break;
     case sethours:
@@ -257,6 +258,7 @@ void update_right() {
     case setday:
     case setbrightness:
     case setsleep:
+    case setwake:
       if (Advance.get_current_state() == down || Decrease.get_current_state() == down || !display.flash) { 
         PORTD |= right; 
       }
@@ -370,7 +372,7 @@ void SettingsButtonPressed() {
   if (PowerState.isInState(Sleeping) or PowerState.isInState(CathodeProtection)) {
     
     PowerState.transitionTo(WakeUp);
-    PowerState.setMaxTick(WAKEUP_TICKS); 
+    PowerState.setMaxTick(WakeupTime * 10); 
     PowerState.setTrigger(WakeupRoutine);
     WakeupRoutine();
     display.setup_mode = false;
@@ -413,9 +415,13 @@ void SettingsButtonPressed() {
         clock.setRamAddress(addrBrightness, Brightness);
         break;
       case setsleep:
-        CancelSettingsMode();
+        SettingsSM.transitionTo(SetWake);
         clock.setRamAddress(addrSleepHi, ((PowerState.getMaxTick()/TICKS_PER_MINUTE) >> 8) & 0xFF);
         clock.setRamAddress(addrSleepLow, (PowerState.getMaxTick()/TICKS_PER_MINUTE) & 0xFF);        
+        break;
+      case setwake:
+        CancelSettingsMode();
+        clock.setRamAddress(addrWake, WakeupTime);
     } 
 
   }
@@ -458,8 +464,11 @@ void AdvanceButtonPressed() {
       Brightness++;
       break;
     case setsleep:
-      //unsigned long sleep_minutes = PowerState.getMaxTick()/TICKS_PER_MINUTE;
+      // Incrementing by TICKS_PER_MINUTE instead of 1
       PowerState.setMaxTick(PowerState.getMaxTick() + TICKS_PER_MINUTE);
+      break;
+    case setwake:
+      WakeupTime++;
   } 
 
   ValidateInputs();
@@ -502,8 +511,11 @@ void DecreaseButtonPressed() {
       Brightness--;
       break;
     case setsleep:
-      //unsigned long sleep_minutes = PowerState.getMaxTick()/TICKS_PER_MINUTE;
+      // Decrementing by TICKS_PER_MINUTE instead of 1
       PowerState.setMaxTick(PowerState.getMaxTick() - TICKS_PER_MINUTE);
+      break;
+    case setwake:
+      WakeupTime--;
   } 
 
   ValidateInputs();
@@ -585,9 +597,13 @@ void ValidateInputs() {
   // todo: set 0 = to permanently on
   if (PowerState.getMaxTick() <= 0) { PowerState.setMaxTick(TICKS_PER_MINUTE); }
   if (PowerState.getMaxTick() > 600*TICKS_PER_MINUTE) { PowerState.setMaxTick(600 * TICKS_PER_MINUTE); }
+
+  if (WakeupTime == 0  ) { WakeupTime = 1; }
+  if (WakeupTime == 100) { WakeupTime = 99; }
 }
 
 void UpdateSetupDisplay() {
+  unsigned int temp = PowerState.getMaxTick()/TICKS_PER_MINUTE;
   switch (SettingsSM.getCurrentStateId()) {
     case normaldisplay:
     case sethours:
@@ -608,8 +624,10 @@ void UpdateSetupDisplay() {
       display.update (4, 0, 9 - Brightness, Brightness );
       break;
     case setsleep:
-      unsigned int temp = PowerState.getMaxTick()/TICKS_PER_MINUTE;
       display.update (5, temp / 100, temp % 100, Brightness );
+      break;
+    case setwake:
+      display.update (6, 0, WakeupTime);
   }
 }
 

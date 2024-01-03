@@ -101,6 +101,7 @@ const byte addrBrightness = 0;
 const byte addrSleepHi = 1;
 const byte addrSleepLow = 2;
 const byte addrAPtubes = 3;
+const byte addrWake = 4;
 
 // To keep track of whether a setting has been changed and needs to be saved
 bool Dirty = false;
@@ -144,7 +145,8 @@ enum SettingsStates {
   setmonth,
   setday,
   setbrightness,
-  setsleep
+  setsleep,
+  setwake
 };
 
 State NormalDisplay(normaldisplay);
@@ -156,10 +158,12 @@ State SetMonth(setmonth);
 State SetDay(setday);// (1-31, depending on Month)
 State SetBrightness(setbrightness); // 1-8
 State SetSleep(setsleep);
+State SetWake(setwake);
 FSM SettingsSM = FSM(NormalDisplay);
 
 Display display(10);
 byte Brightness = BrightnessHi;
+byte WakeupTime = 10; // Multiply by 10 
 
 byte buttons = 0;
 byte display_date_step = 0;
