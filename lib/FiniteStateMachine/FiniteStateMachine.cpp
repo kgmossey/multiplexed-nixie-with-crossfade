@@ -1,4 +1,4 @@
-#include "StateMachine.h"
+#include "FiniteStateMachine.h"
 
 //FINITE STATE
 State::State( void (*updateFunction)() ){

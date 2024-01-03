@@ -1,12 +1,14 @@
 /*
-||
-|| @file FiniteStateMachine.h
-|| @version 1.7
+|| 
+|| @file StateMachine.H
+|| @version 2.0
 || @author Alexander Brevig
 || @contact alexanderbrevig@gmail.com
 ||
 || @description
 || | Provide an easy way of making finite state machines
+|| | Original library Alexander Brevig, major updates added by Kevin Mossey
+|| | This state machine library includes timer integration functions
 || #
 ||
 || @license
