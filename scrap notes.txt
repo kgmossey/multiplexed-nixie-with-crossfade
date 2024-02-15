@@ -123,7 +123,7 @@ Todo:
 - refactor code
   - make single include file of all global constants (Brightness settings for example)
 - Move button input pins to be next to each other on header (figure out D8 being constantly pressed)
-- Update the repositories to include original link to state machine code, ds1307 lib.
+- Make button.cpp and button.h separate submodules like RTC_DS1307 and FiniteStateMachine
 - Add CAD files to github
 - update button bracket
 - Update settings to allow for manual config of hours that cathode protection routine runs (currently 12-16)
@@ -161,3 +161,7 @@ Updates-27Dec23
 
 Updates-03Jan24
 - Added a configurable setting to adjust how long each pair of tubes is on full power before multiplexing begins
+
+Intermediate updates:
+- Moved RTC_DS1307 and FiniteStateMachine to submodules
+- Added Readme.md to FiniteStateMachine repo...
